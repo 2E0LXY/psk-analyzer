@@ -1,0 +1,14 @@
+build/
+out/
+.codex-remote-attachments/
+.vs/
+.vscode/
+CMakeUserPresets.json
+*.user
+*.suo
+*.obj
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.log
