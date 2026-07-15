@@ -50,7 +50,12 @@ It builds:
 - Ubuntu latest, as the Debian-compatible Linux build.
 - Windows latest, using Visual Studio 2022.
 
-The workflow runs on pushes, pull requests, version tags, and manual `workflow_dispatch`. Build artifacts are uploaded as `psk-analyzer-linux` and `psk-analyzer-windows`.
+The workflow runs on pushes, pull requests, version tags, and manual `workflow_dispatch`.
+
+Build artifacts are uploaded as:
+
+- `psk-analyzer-deb`, containing the Debian-compatible `.deb` package.
+- `psk-analyzer-windows`, containing the Windows `.exe` plus deployed Qt runtime files.
 
 ## Status
 

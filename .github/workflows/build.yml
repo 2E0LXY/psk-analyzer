@@ -24,22 +24,25 @@ jobs:
         include:
           - name: Debian-compatible Ubuntu
             os: ubuntu-latest
-            artifact: psk-analyzer-linux
+            artifact: psk-analyzer-deb
             configure: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
             build: cmake --build build --config Release --parallel
-            artifact_path: build/psk-analyzer
+            package: cmake --build build --target package --config Release
+            artifact_path: build/*.deb
           - name: Windows
             os: windows-2022
             artifact: psk-analyzer-windows
             configure: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
             build: cmake --build build --config Release --parallel
-            artifact_path: build/Release/psk-analyzer.exe
+            package: cmake --install build --config Release --prefix package && windeployqt package/bin/psk-analyzer.exe
+            artifact_path: package/**
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Qt
+        if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.7.3"
@@ -49,7 +52,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
+          sudo apt-get install -y build-essential cmake dpkg-dev fakeroot ninja-build qt6-base-dev
 
       - name: Configure
         shell: bash
@@ -58,6 +61,10 @@ jobs:
       - name: Build
         shell: bash
         run: ${{ matrix.build }}
+
+      - name: Package
+        shell: bash
+        run: ${{ matrix.package }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
