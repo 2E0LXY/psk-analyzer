@@ -1,13 +1,15 @@
 #pragma once
 
 #include "AppConfig.h"
+#include "DecoderTableModel.h"
 #include "MockDecoder.h"
 #include "SignalTypes.h"
 
 #include <QLabel>
 #include <QMainWindow>
 #include <QPlainTextEdit>
-#include <QTableWidget>
+#include <QPushButton>
+#include <QTableView>
 
 class WaterfallWidget;
 
@@ -19,25 +21,41 @@ public:
 
 private slots:
     void addDecodedLine(const DecodeLine &line);
-    void handleDecodeClick(int row, int column);
+    void handleActiveDecodeClick(const QModelIndex &index);
+    void handleSweeperClick(const QModelIndex &index);
     void handleWaterfallClick(double audioHz);
     void openSettings();
     void insertMacro(const QString &macroText);
+    void updateTxSafety();
 
 private:
     QString extractCallsign(const QString &text, const QString &fallback) const;
     void prepareReply(const DecodeLine &line);
+    void loadSettings();
+    void saveSettings() const;
     void updateStatusLabels();
     QWidget *buildTopBar();
-    QWidget *buildBottomBar();
+    QWidget *buildRightPanel();
+    QWidget *buildWorkflowPanel();
+    QWidget *buildSelectedQsoPanel();
+    QWidget *buildTxPanel();
+    void configureTable(QTableView *view);
 
     AppConfig m_config;
     DecodeLine m_selectedLine;
+    DecoderTableModel *m_activeModel = nullptr;
+    DecoderTableModel *m_sweeperModel = nullptr;
     WaterfallWidget *m_waterfall = nullptr;
-    QTableWidget *m_decodeTable = nullptr;
+    QTableView *m_activeView = nullptr;
+    QTableView *m_sweeperView = nullptr;
     QPlainTextEdit *m_txText = nullptr;
     QLabel *m_vfoLabel = nullptr;
     QLabel *m_targetLabel = nullptr;
     QLabel *m_catLabel = nullptr;
+    QLabel *m_qsoCallLabel = nullptr;
+    QLabel *m_qsoSignalLabel = nullptr;
+    QLabel *m_qsoFreqLabel = nullptr;
+    QLabel *m_txSafetyLabel = nullptr;
+    QPushButton *m_sendButton = nullptr;
     MockDecoder m_decoder;
 };

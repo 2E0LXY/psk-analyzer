@@ -19,6 +19,7 @@ struct DecodeLine {
     int channel = 1;
     QString callsign;
     QString mode = "BPSK31";
+    QString state = "Locked";
     QString text;
     SignalMetrics metrics;
 };

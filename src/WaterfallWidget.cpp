@@ -31,6 +31,16 @@ void WaterfallWidget::paintEvent(QPaintEvent *)
         const int x = lane * width() / 17;
         painter.drawLine(x, 24, x, height());
     }
+
+    const int rxX = xForAudio(m_rxAudioHz);
+    painter.setPen(QPen(QColor(98, 235, 255), 2));
+    painter.drawLine(rxX, 0, rxX, height());
+    painter.drawText(rxX + 4, height() - 28, QString("RX %1 Hz").arg(m_rxAudioHz, 0, 'f', 0));
+
+    const int txX = xForAudio(m_txAudioHz);
+    painter.setPen(QPen(m_txLockedToRx ? QColor(105, 255, 150) : QColor(255, 177, 62), 2, Qt::DashLine));
+    painter.drawLine(txX, 0, txX, height());
+    painter.drawText(txX + 4, height() - 10, QString("TX %1 Hz").arg(m_txAudioHz, 0, 'f', 0));
 }
 
 void WaterfallWidget::resizeEvent(QResizeEvent *)
@@ -47,7 +57,8 @@ void WaterfallWidget::resizeEvent(QResizeEvent *)
 
 void WaterfallWidget::mousePressEvent(QMouseEvent *event)
 {
-    const double audioHz = 300.0 + (event->position().x() / qMax(1, width())) * 2700.0;
+    const double audioHz = audioForX(event->position().x());
+    setRxAudioHz(audioHz);
     emit frequencyClicked(audioHz);
 }
 
@@ -91,4 +102,39 @@ QColor WaterfallWidget::colorForLevel(double value) const
     if (value < 0.70) return QColor(int(value * 180), 220, 40);
     if (value < 0.90) return QColor(255, int(190 - value * 70), 20);
     return QColor(255, 245, 210);
+}
+
+void WaterfallWidget::setRxAudioHz(double audioHz)
+{
+    m_rxAudioHz = qBound(300.0, audioHz, 3000.0);
+    if (m_txLockedToRx) {
+        m_txAudioHz = m_rxAudioHz;
+    }
+    update();
+}
+
+void WaterfallWidget::setTxAudioHz(double audioHz)
+{
+    m_txAudioHz = qBound(300.0, audioHz, 3000.0);
+    update();
+}
+
+void WaterfallWidget::setTxLockedToRx(bool locked)
+{
+    m_txLockedToRx = locked;
+    if (m_txLockedToRx) {
+        m_txAudioHz = m_rxAudioHz;
+    }
+    update();
+}
+
+int WaterfallWidget::xForAudio(double audioHz) const
+{
+    const double normalized = (audioHz - 300.0) / 2700.0;
+    return qBound(0, int(normalized * width()), qMax(0, width() - 1));
+}
+
+double WaterfallWidget::audioForX(double x) const
+{
+    return 300.0 + (x / qMax(1, width())) * 2700.0;
 }

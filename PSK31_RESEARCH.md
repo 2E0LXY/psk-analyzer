@@ -796,3 +796,16 @@ Click behavior:
 ## Key Recommendation
 
 Build the first release as an excellent interoperable PSK31/QPSK31 multi-decoder. Put aggressive weak-signal DSP behind normal PSK31 reception, but be explicit that true below-noise damaged-signal correction requires either QPSK31 FEC or a new opt-in mode with stronger coding and longer integration.
+
+## Current Improvement Backlog
+
+See `IMPROVEMENTS.md` for the current next-pass review of receiver methods and UI layout. The highest-priority changes are:
+
+- split wideband signal detection from the 16 full decoder slots;
+- add explicit per-signal decoder states;
+- preserve soft confidence through symbol, character, line, and callsign decisions;
+- separate `Active Decoders` from a SuperSweeper-style candidate monitor;
+- add a selected-QSO panel directly tied to the reply composer;
+- make TX safety, target callsign, TX frequency, and PTT state visually dominant;
+- replace the prototype table with real Qt models backed by full decoder/QSO data;
+- add settings persistence, macro editing, waterfall RX/TX markers, ADIF logging, and Hamlib service boundaries.

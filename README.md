@@ -5,10 +5,14 @@ Initial beta scaffold for a Windows and Debian PSK-family digital-mode program.
 The current build is a runnable Qt UI prototype with:
 
 - right-to-left waterfall simulation;
-- 16-channel real-time decode table;
+- 16-channel active decoder model;
+- separate SuperSweeper-style candidate monitor;
 - click decoded text to select callsign and prepare reply;
+- selected-QSO panel with callsign, frequency, audio offset, SNR, quality, and IMD;
+- TX safety strip that inhibits sending until callsign, target, and text are valid;
+- RX/TX waterfall markers;
 - TX composer and macro buttons;
-- station, CAT/PTT, radio, antenna, and macro settings dialog;
+- station, CAT/PTT, radio, antenna, and macro settings dialog with persisted settings;
 - signal metric placeholders for reports;
 - architecture ready for Hamlib, DSP, logbook, and PSK128FEC implementation.
 

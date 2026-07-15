@@ -10,6 +10,9 @@ class WaterfallWidget : public QWidget {
 
 public:
     explicit WaterfallWidget(QWidget *parent = nullptr);
+    void setRxAudioHz(double audioHz);
+    void setTxAudioHz(double audioHz);
+    void setTxLockedToRx(bool locked);
 
 signals:
     void frequencyClicked(double audioHz);
@@ -24,7 +27,12 @@ private slots:
 
 private:
     QColor colorForLevel(double value) const;
+    int xForAudio(double audioHz) const;
+    double audioForX(double x) const;
     QImage m_image;
     QTimer m_timer;
+    double m_rxAudioHz = 1420.0;
+    double m_txAudioHz = 1420.0;
+    bool m_txLockedToRx = true;
     int m_tick = 0;
 };

@@ -10,6 +10,8 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_executable(psk-analyzer
     src/AppConfig.h
+    src/DecoderTableModel.cpp
+    src/DecoderTableModel.h
     src/MacroEngine.cpp
     src/MacroEngine.h
     src/MainWindow.cpp
