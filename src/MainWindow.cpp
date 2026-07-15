@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -69,6 +70,14 @@ MainWindow::MainWindow(QWidget *parent)
     mainSplitter->setStretchFactor(0, 3);
     mainSplitter->setStretchFactor(1, 2);
     mainLayout->addWidget(mainSplitter, 1);
+
+    // Selected QSO, RX transcript, and the TX composer stay visible at all
+    // times - an operator mid-QSO should never lose the reply target or
+    // composer just because they checked the Log or Signal tab. Only the
+    // secondary reference info (log state, measurement windows) is tabbed.
+    mainLayout->addWidget(buildRxTranscriptPanel());
+    mainLayout->addWidget(buildSelectedQsoPanel());
+    mainLayout->addWidget(buildTxPanel());
     mainLayout->addWidget(buildWorkflowPanel());
     setCentralWidget(central);
 
@@ -89,6 +98,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(&m_decoder, &MockDecoder::decoded, this, &MainWindow::addDecodedLine);
     connect(m_txText, &QPlainTextEdit::textChanged, this, &MainWindow::updateTxSafety);
+
+    m_catLabel = new QLabel("CAT Offline", this);
+    m_audioLabel = new QLabel("Audio: starting", this);
+    m_rxLevelLabel = new QLabel("RX level: --", this);
+    statusBar()->addPermanentWidget(m_catLabel);
+    statusBar()->addPermanentWidget(m_audioLabel);
+    statusBar()->addPermanentWidget(m_rxLevelLabel);
+
     m_audioEngine->startRx();
     updateStatusLabels();
     updateTxSafety();
@@ -103,9 +120,13 @@ QWidget *MainWindow::buildTopBar()
     auto *setup = new QPushButton("Setup", this);
     connect(setup, &QPushButton::clicked, this, &MainWindow::openSettings);
 
-    m_catLabel = new QLabel("CAT Offline", this);
-    m_audioLabel = new QLabel("Audio: starting", this);
-    m_rxLevelLabel = new QLabel("RX level: --", this);
+    auto *band = new QComboBox(this);
+    band->addItems({"160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"});
+    band->setCurrentText("20m");
+    // Visual band context only for now - not yet wired to CAT, which does
+    // not exist. Selecting a band here does not retune anything.
+    band->setToolTip("Band reference only - no CAT backend is implemented yet");
+
     m_simulateCheck = new QCheckBox("Simulate (demo data)", this);
     m_simulateCheck->setChecked(false);
     m_simulateCheck->setObjectName("simulateToggle");
@@ -115,9 +136,7 @@ QWidget *MainWindow::buildTopBar()
     auto *mode = new QLabel("Mode: BPSK31   BW: 60 Hz   RX   TX/RX Locked", this);
 
     layout->addWidget(setup);
-    layout->addWidget(m_catLabel);
-    layout->addWidget(m_audioLabel);
-    layout->addWidget(m_rxLevelLabel);
+    layout->addWidget(band);
     layout->addWidget(m_simulateCheck);
     layout->addStretch();
     layout->addWidget(m_vfoLabel);
@@ -161,12 +180,7 @@ QWidget *MainWindow::buildRightPanel()
 QWidget *MainWindow::buildWorkflowPanel()
 {
     auto *tabs = new QTabWidget(this);
-
-    auto *reply = new QWidget(this);
-    auto *replyLayout = new QVBoxLayout(reply);
-    replyLayout->addWidget(buildSelectedQsoPanel());
-    replyLayout->addWidget(buildTxPanel());
-    tabs->addTab(reply, "Reply");
+    tabs->setMaximumHeight(90);
 
     auto *log = new QWidget(this);
     auto *logForm = new QFormLayout(log);
@@ -181,6 +195,20 @@ QWidget *MainWindow::buildWorkflowPanel()
     signalForm->addRow("Metrics", new QLabel("SNR, IMD, drift, quality, noise floor", this));
     tabs->addTab(signal, "Signal");
     return tabs;
+}
+
+QWidget *MainWindow::buildRxTranscriptPanel()
+{
+    auto *box = new QGroupBox("Live RX (channel 1)", this);
+    auto *layout = new QVBoxLayout(box);
+    m_rxTranscript = new QPlainTextEdit(this);
+    m_rxTranscript->setReadOnly(true);
+    m_rxTranscript->setMaximumHeight(70);
+    m_rxTranscript->setPlaceholderText(
+        "Real demodulated audio appears here. Click the waterfall to tune the RX offset - "
+        "there is no AFC yet, so this only locks near the clicked frequency.");
+    layout->addWidget(m_rxTranscript);
+    return box;
 }
 
 QWidget *MainWindow::buildSelectedQsoPanel()
@@ -391,6 +419,19 @@ void MainWindow::handleTxFinished()
 
 void MainWindow::handleRxTextDecoded(const QString &text)
 {
+    if (m_rxTranscript) {
+        if (text.startsWith(m_liveRxLine.text) && text.size() > m_liveRxLine.text.size()) {
+            m_rxTranscript->insertPlainText(text.mid(m_liveRxLine.text.size()));
+        } else if (!text.isEmpty() && text != m_liveRxLine.text) {
+            // Demodulator buffer was reset (offset changed or trimmed) -
+            // this is a discontinuity, not a continuation, so mark it.
+            m_rxTranscript->insertPlainText("\n[--- re-sync ---]\n" + text);
+        }
+        QTextCursor cursor = m_rxTranscript->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        m_rxTranscript->setTextCursor(cursor);
+    }
+
     m_liveRxLine.text = text;
     m_liveRxLine.state = text.isEmpty() ? "Searching" : "Locked";
     m_liveRxLine.metrics.lockQuality = m_liveRxLine.state;

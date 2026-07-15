@@ -49,6 +49,7 @@ private:
     QWidget *buildWorkflowPanel();
     QWidget *buildSelectedQsoPanel();
     QWidget *buildTxPanel();
+    QWidget *buildRxTranscriptPanel();
     void configureTable(QTableView *view);
 
     AppConfig m_config;
@@ -59,6 +60,7 @@ private:
     QTableView *m_activeView = nullptr;
     QTableView *m_sweeperView = nullptr;
     QPlainTextEdit *m_txText = nullptr;
+    QPlainTextEdit *m_rxTranscript = nullptr;
     QLabel *m_vfoLabel = nullptr;
     QLabel *m_targetLabel = nullptr;
     QLabel *m_catLabel = nullptr;
