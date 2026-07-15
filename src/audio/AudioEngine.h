@@ -59,9 +59,24 @@ private:
     std::vector<double> m_rxSamples;
     std::string m_rxLastDecoded;
 
-    // Hard cap on retained RX samples so a long unattended session cannot
-    // grow this without bound. Trimming loses demodulator continuity at the
-    // trim boundary (a handful of characters may be missed there) - this is
-    // a known limitation of the non-streaming reference demodulator.
-    static constexpr std::size_t kMaxRxSamples = 480000; // 10s at 48kHz
+    // Hard cap on retained RX samples. AudioEngine re-runs
+    // Bpsk31Codec::demodulateText() over the ENTIRE retained buffer on
+    // every audio callback (see runRxDemodulator()), because the
+    // demodulator is a batch function with no persisted state between
+    // calls. That makes per-callback cost O(buffer size), not O(new
+    // samples) - at the old 10s/48kHz cap, the Costas+Gardner demodulator
+    // measured ~25ms worst case per callback, which risks audio-thread
+    // stalls if callbacks fire faster than that. 3s bounds worst case to
+    // ~6ms, which is safe, but this is a cap on a real cost, not a fix for
+    // it: a proper fix makes the demodulator loop state (epochPos,
+    // phaseEpoch, carrier/timing integrators) persist across calls so only
+    // new samples are processed each time. That is a larger refactor
+    // (Bpsk31Codec's demodulateBits would need to become a stateful
+    // streaming object rather than a pure function) and is flagged here
+    // rather than attempted blind.
+    //
+    // Trimming loses demodulator continuity at the trim boundary (a
+    // handful of characters may be missed there) - a second known
+    // limitation of the batch-recompute approach.
+    static constexpr std::size_t kMaxRxSamples = 144000; // 3s at 48kHz
 };
