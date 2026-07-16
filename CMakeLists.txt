@@ -12,6 +12,10 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia)
 add_library(psk-core
     src/dsp/Bpsk31Codec.cpp
     src/dsp/Bpsk31Codec.h
+    src/dsp/ConvCode.cpp
+    src/dsp/ConvCode.h
+    src/dsp/Crc16.cpp
+    src/dsp/Crc16.h
     src/dsp/PskVaricode.cpp
     src/dsp/PskVaricode.h
 )

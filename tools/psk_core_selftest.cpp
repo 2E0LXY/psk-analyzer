@@ -1,9 +1,14 @@
 #include "dsp/Bpsk31Codec.h"
+#include "dsp/ConvCode.h"
+#include "dsp/Crc16.h"
 #include "dsp/PskVaricode.h"
 
+#include <cmath>
 #include <iostream>
+#include <random>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -139,6 +144,112 @@ bool checkImpairmentRecovery(std::string *error)
     return true;
 }
 
+bool checkConvCodeRoundTrip(std::string *error)
+{
+    // No-noise round trip: encode then decode with hard +/-1 soft values
+    // should reproduce the message exactly. Catches basic encoder/decoder
+    // structural bugs (trellis indexing, generator polynomial mistakes)
+    // before any noise-performance claim is meaningful.
+    std::vector<int> msg = {1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1,
+                             1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0};
+    const std::vector<int> encoded = psk::dsp::ConvCode::encode(msg);
+    const std::size_t expectedEncodedSize = (msg.size() + psk::dsp::ConvCode::kConstraintLength - 1) * 2;
+    if (encoded.size() != expectedEncodedSize) {
+        if (error) {
+            *error = "ConvCode::encode produced " + std::to_string(encoded.size())
+                + " bits, expected " + std::to_string(expectedEncodedSize);
+        }
+        return false;
+    }
+
+    std::vector<double> soft;
+    soft.reserve(encoded.size());
+    for (int b : encoded) {
+        soft.push_back(b ? 1.0 : -1.0);
+    }
+    const std::vector<int> decoded = psk::dsp::ConvCode::decodeSoft(soft, static_cast<int>(msg.size()));
+    if (decoded != msg) {
+        if (error) {
+            *error = "ConvCode no-noise round trip did not reproduce the original message";
+        }
+        return false;
+    }
+    return true;
+}
+
+bool checkConvCodeCodingGain(std::string *error)
+{
+    // Fixed-seed Monte Carlo regression check: at Eb/N0 = 1.0dB, this code
+    // measured ~7.5e-5 BER / ~0.6% frame error rate during development
+    // (see the conversation history / commit message for the full
+    // BER-vs-EbN0 characterisation this is drawn from). This is a coarse
+    // regression guard, not a full re-characterisation on every test run -
+    // it catches a broken decoder (e.g. a generator polynomial or trellis
+    // bug that silently destroys coding gain) without the cost of a full
+    // multi-point sweep in the ordinary test suite.
+    std::mt19937 rng(20260716); // fixed seed: reproducible, not tuned to pass
+    std::normal_distribution<double> noise(0.0, 1.0);
+
+    const int messageBits = 200;
+    const int trials = 500;
+    const double ebN0 = std::pow(10.0, 1.0 / 10.0); // 1.0dB
+    const double noiseStd = std::sqrt(1.0 / (2.0 * ebN0 * 2.0));
+
+    long errors = 0;
+    long total = 0;
+    for (int trial = 0; trial < trials; ++trial) {
+        std::vector<int> msg(messageBits);
+        for (auto &b : msg) {
+            b = static_cast<int>(rng() & 1u);
+        }
+        const std::vector<int> encoded = psk::dsp::ConvCode::encode(msg);
+        std::vector<double> soft(encoded.size());
+        for (std::size_t i = 0; i < encoded.size(); ++i) {
+            const double tx = (encoded[i] ? 1.0 : -1.0) * std::sqrt(0.5);
+            soft[i] = tx + noiseStd * noise(rng);
+        }
+        const std::vector<int> decoded = psk::dsp::ConvCode::decodeSoft(soft, messageBits);
+        for (int i = 0; i < messageBits; ++i) {
+            if (decoded[static_cast<std::size_t>(i)] != msg[static_cast<std::size_t>(i)]) {
+                ++errors;
+            }
+            ++total;
+        }
+    }
+
+    const double ber = static_cast<double>(errors) / static_cast<double>(total);
+    // Generous margin above the ~7.5e-5 measured value - this is a "did
+    // coding gain collapse" check, not a precise re-measurement.
+    if (ber > 0.01) {
+        if (error) {
+            *error = "ConvCode BER at Eb/N0=1.0dB measured " + std::to_string(ber)
+                + ", expected well under 0.01 - coding gain may have regressed";
+        }
+        return false;
+    }
+    return true;
+}
+
+bool checkCrc16(std::string *error)
+{
+    const std::uint16_t crc1 = psk::dsp::Crc16::compute(std::string("CQ CQ DE 2E0LXY"));
+    const std::uint16_t crc2 = psk::dsp::Crc16::compute(std::string("CQ CQ DE 2E0LXZ"));
+    if (crc1 == crc2) {
+        if (error) {
+            *error = "Crc16 produced identical CRCs for different input";
+        }
+        return false;
+    }
+    const std::uint16_t crc1Again = psk::dsp::Crc16::compute(std::string("CQ CQ DE 2E0LXY"));
+    if (crc1 != crc1Again) {
+        if (error) {
+            *error = "Crc16 is not deterministic for identical input";
+        }
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main()
@@ -180,6 +291,21 @@ int main()
     if (!checkImpairmentRecovery(&error)) {
         std::cerr << "Impairment recovery check failed: " << error << '\n';
         return 5;
+    }
+
+    if (!checkConvCodeRoundTrip(&error)) {
+        std::cerr << "ConvCode round-trip check failed: " << error << '\n';
+        return 6;
+    }
+
+    if (!checkConvCodeCodingGain(&error)) {
+        std::cerr << "ConvCode coding gain regression check failed: " << error << '\n';
+        return 7;
+    }
+
+    if (!checkCrc16(&error)) {
+        std::cerr << "Crc16 check failed: " << error << '\n';
+        return 8;
     }
 
     std::cout << "PSK core self-test passed\n";
