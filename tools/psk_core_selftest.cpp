@@ -61,7 +61,7 @@ bool checkImpairmentRecovery(std::string *error)
     const std::string message = "CQ CQ DE 2E0LXY 2E0LXY K THE QUICK BROWN FOX 73";
 
     struct FreqCase { double offsetHz; };
-    for (const FreqCase c : {FreqCase{2.0}, FreqCase{5.0}, FreqCase{7.0}, FreqCase{-7.0}}) {
+    for (const FreqCase c : {FreqCase{2.0}, FreqCase{5.0}, FreqCase{8.0}, FreqCase{10.0}, FreqCase{-10.0}}) {
         psk::dsp::Bpsk31Config txConfig;
         txConfig.carrierHz = 1000.0 + c.offsetHz;
         const psk::dsp::Bpsk31Codec txCodec(txConfig);
@@ -71,8 +71,8 @@ bool checkImpairmentRecovery(std::string *error)
         const std::string decoded = rxCodec.demodulateText(samples);
         if (decoded.find(message) == std::string::npos) {
             if (error) {
-                *error = "Costas loop failed to recover " + std::to_string(c.offsetHz)
-                    + "Hz carrier offset (within the validated +/-7Hz envelope)";
+                *error = "Costas loop + acquisition failed to recover " + std::to_string(c.offsetHz)
+                    + "Hz carrier offset (within the validated +/-10Hz envelope)";
             }
             return false;
         }
@@ -113,21 +113,23 @@ bool checkImpairmentRecovery(std::string *error)
         }
     }
 
-    // Sanity check that the documented ~8Hz ceiling is real and hasn't
-    // silently vanished or silently gotten worse: 10Hz is expected to
-    // fail. If this starts passing, the envelope comment needs updating;
-    // if something within the validated range starts failing near this
-    // boundary, that's a regression.
+    // Sanity check that there's still a real ceiling (multi-hypothesis
+    // acquisition widened it, didn't remove it) and hasn't silently
+    // vanished or silently gotten worse: 20Hz is expected to fail - well
+    // past the ~12-13Hz boundary measured during development. If this
+    // starts passing, the envelope comment needs updating; if something
+    // within the validated +/-10Hz range starts failing, that's a
+    // regression.
     {
         psk::dsp::Bpsk31Config txConfig;
-        txConfig.carrierHz = 1010.0;
+        txConfig.carrierHz = 1020.0;
         const psk::dsp::Bpsk31Codec txCodec(txConfig);
         const std::vector<double> samples = txCodec.modulateText(message);
         const psk::dsp::Bpsk31Codec rxCodec;
         const std::string decoded = rxCodec.demodulateText(samples);
         if (decoded.find(message) != std::string::npos) {
             if (error) {
-                *error = "10Hz offset unexpectedly decoded - envelope comment in "
+                *error = "20Hz offset unexpectedly decoded - envelope comment in "
                     "Bpsk31Codec.cpp is now understating the loop's actual pull-in range";
             }
             return false;

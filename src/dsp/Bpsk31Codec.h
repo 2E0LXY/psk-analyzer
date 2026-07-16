@@ -12,6 +12,17 @@ struct Bpsk31Config {
     double amplitude = 0.65;
     int preambleSymbols = 64;
     int postambleSymbols = 64;
+
+    // RX Costas (carrier) and Gardner (timing) loop filter gains. See the
+    // validated-envelope comment in Bpsk31Codec.cpp for what these were
+    // tuned and tested against. Exposed here (rather than hardcoded) so
+    // they can be swept/tuned without editing the codec, and so a future
+    // properly-designed loop filter (zeta/omega_n mapping) can replace
+    // these empirical defaults without an API change.
+    double costasKp = 0.06;
+    double costasKi = 0.004;
+    double gardnerKp = 1.50;
+    double gardnerKi = 0.01875;
 };
 
 class Bpsk31Codec {
@@ -28,6 +39,8 @@ public:
 
 private:
     Bpsk31Config m_config;
+    std::vector<int> trackWithOffset(const std::vector<double> &samples, double offsetHz) const;
+    double scoreDecodedBits(const std::vector<int> &bits) const;
 };
 
 } // namespace psk::dsp

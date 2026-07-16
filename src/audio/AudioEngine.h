@@ -64,19 +64,23 @@ private:
     // every audio callback (see runRxDemodulator()), because the
     // demodulator is a batch function with no persisted state between
     // calls. That makes per-callback cost O(buffer size), not O(new
-    // samples) - at the old 10s/48kHz cap, the Costas+Gardner demodulator
-    // measured ~25ms worst case per callback, which risks audio-thread
-    // stalls if callbacks fire faster than that. 3s bounds worst case to
-    // ~6ms, which is safe, but this is a cap on a real cost, not a fix for
-    // it: a proper fix makes the demodulator loop state (epochPos,
-    // phaseEpoch, carrier/timing integrators) persist across calls so only
-    // new samples are processed each time. That is a larger refactor
+    // samples). The matched raised-cosine filter and 5-hypothesis
+    // frequency acquisition added since the original 3s/10s caps were set
+    // substantially raised per-sample cost (measured ~26ms/second of
+    // buffer on a representative noise-input worst case), so this cap was
+    // re-measured and reduced accordingly: 0.75s bounds worst case to
+    // ~19ms, which is safe, but - as before - this is a cap on a real
+    // cost, not a fix for it. The actual fix is making the demodulator
+    // loop state (epochPos, phaseEpoch, carrier/timing integrators, and
+    // now the 5 acquisition hypotheses) persist across calls so only new
+    // samples are processed each time; that is a larger refactor
     // (Bpsk31Codec's demodulateBits would need to become a stateful
     // streaming object rather than a pure function) and is flagged here
     // rather than attempted blind.
     //
     // Trimming loses demodulator continuity at the trim boundary (a
     // handful of characters may be missed there) - a second known
-    // limitation of the batch-recompute approach.
-    static constexpr std::size_t kMaxRxSamples = 144000; // 3s at 48kHz
+    // limitation of the batch-recompute approach, more noticeable now
+    // that the retained window is shorter.
+    static constexpr std::size_t kMaxRxSamples = 36000; // 0.75s at 48kHz
 };
