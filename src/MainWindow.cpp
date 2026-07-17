@@ -7,8 +7,10 @@
 #include <QAction>
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QButtonGroup>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -132,6 +134,7 @@ MainWindow::MainWindow(QWidget *parent)
         QPushButton { background: #1b2a35; color: #d8f7ff; border: 1px solid #355465; padding: 6px 10px; }
         QPushButton:hover { background: #244052; }
         QPushButton:disabled { color: #60717a; background: #101820; border-color: #1b2a35; }
+        QPushButton:checked { background: #16495c; border: 1px solid #6ee9ff; color: #6ee9ff; font-weight: 600; }
     )");
 
     connect(m_txText, &QPlainTextEdit::textChanged, this, &MainWindow::updateTxSafety);
@@ -142,6 +145,13 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->addPermanentWidget(m_catLabel);
     statusBar()->addPermanentWidget(m_audioLabel);
     statusBar()->addPermanentWidget(m_rxLevelLabel);
+
+    // statusBar()->addWidget() (not addPermanentWidget) places a widget on
+    // the LEFT of the status bar, which is where this belongs now - moved
+    // out of the top bar, which was getting crowded with the new band/mode
+    // button grids either side of the frequency display.
+    auto *modeStatus = new QLabel("BW: 60 Hz   RX   TX/RX Locked", this);
+    statusBar()->addWidget(modeStatus);
 
     m_audioEngine->startRx();
     if (m_config.cat.autoConnect) {
@@ -166,25 +176,62 @@ MainWindow::~MainWindow()
 QWidget *MainWindow::buildTopBar()
 {
     auto *bar = new QWidget(this);
-    auto *layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(4, 0, 4, 0);
+    auto *outerLayout = new QHBoxLayout(bar);
+    outerLayout->setContentsMargins(4, 4, 4, 4);
+
+    // --- Left: Setup button + band buttons, arranged in equal rows ---
+    auto *leftColumn = new QWidget(this);
+    auto *leftLayout = new QVBoxLayout(leftColumn);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
 
     auto *setup = new QPushButton("Setup", this);
     connect(setup, &QPushButton::clicked, this, &MainWindow::openSettings);
+    leftLayout->addWidget(setup);
 
-    auto *band = new QComboBox(this);
-    band->addItems({"160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"});
-    band->setCurrentText("20m");
-    band->setToolTip("Sets the active CAT rig to the normal PSK dial frequency for this band");
-    connect(band, &QComboBox::currentTextChanged, this, &MainWindow::handleBandChanged);
+    const QStringList bands = {"160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"};
+    constexpr int kGridRows = 5; // both grids target this many rows so the
+                                 // two columns line up visually either
+                                 // side of the frequency display
+    constexpr int kBandColumns = 2; // 10 bands / 5 rows = 2 columns exactly
+    auto *bandGrid = new QGridLayout();
+    bandGrid->setSpacing(2);
+    auto *bandGroup = new QButtonGroup(this);
+    for (int i = 0; i < bands.size(); ++i) {
+        auto *btn = new QPushButton(bands[i], this);
+        btn->setCheckable(true);
+        btn->setMinimumWidth(56);
+        btn->setToolTip("Sets the active CAT rig to the normal PSK dial frequency for this band");
+        bandGroup->addButton(btn);
+        if (bands[i] == "20m") {
+            btn->setChecked(true);
+        }
+        const QString bandName = bands[i];
+        connect(btn, &QPushButton::clicked, this, [this, bandName]() { handleBandChanged(bandName); });
+        bandGrid->addWidget(btn, i % kGridRows, i / kGridRows);
+    }
+    leftLayout->addLayout(bandGrid);
+    leftLayout->addStretch();
+    outerLayout->addWidget(leftColumn);
 
+    // --- Centre: frequency display ---
+    auto *centerColumn = new QWidget(this);
+    auto *centerLayout = new QVBoxLayout(centerColumn);
     m_vfoLabel = new QLabel("14.070.000 MHz", this);
     m_vfoLabel->setObjectName("vfo");
-    auto *mode = new QComboBox(this);
-    mode->setToolTip("Roadmap of modes to implement (curated to modes still in real use - see "
-                      "FEATURE_ROADMAP.md) - only BPSK31 is actually decodable today; selecting "
-                      "anything else does not change what this app can send or receive yet");
-    mode->addItems({
+    m_vfoLabel->setAlignment(Qt::AlignCenter);
+    centerLayout->addStretch();
+    centerLayout->addWidget(m_vfoLabel);
+    centerLayout->addStretch();
+    outerLayout->addWidget(centerColumn, 1);
+
+    // --- Right: mode buttons, arranged in equal rows ---
+    // Roadmap of modes to implement (curated to modes still in real use -
+    // see FEATURE_ROADMAP.md) - only BPSK31 is actually decodable today;
+    // selecting anything else does not change what this app can send or
+    // receive yet. Button labels show just the mode name (not the full
+    // "Category / Name" string) so 18 buttons stay a readable width in a
+    // grid - the full name is still in the tooltip.
+    const QStringList modes = {
         "PSK / BPSK31",
         "PSK / BPSK63",
         "PSK / BPSK125",
@@ -203,17 +250,35 @@ QWidget *MainWindow::buildTopBar()
         "SSTV / Martin 1",
         "SSTV / Scottie 1",
         "SSTV / Robot 36"
-    });
-    mode->setCurrentText("PSK / BPSK31");
-    auto *modeStatus = new QLabel("BW: 60 Hz   RX   TX/RX Locked", this);
+    };
+    const QString modeTooltipSuffix =
+        " - roadmap of modes to implement (see FEATURE_ROADMAP.md); only BPSK31 is "
+        "actually decodable today, selecting anything else does not change what this "
+        "app can send or receive yet";
 
-    layout->addWidget(setup);
-    layout->addWidget(band);
-    layout->addStretch();
-    layout->addWidget(m_vfoLabel);
-    layout->addStretch();
-    layout->addWidget(mode);
-    layout->addWidget(modeStatus);
+    auto *rightColumn = new QWidget(this);
+    auto *rightLayout = new QVBoxLayout(rightColumn);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *modeGrid = new QGridLayout();
+    modeGrid->setSpacing(2);
+    auto *modeGroup = new QButtonGroup(this);
+    for (int i = 0; i < modes.size(); ++i) {
+        const QString fullName = modes[i];
+        const QString shortName = fullName.section('/', 1).trimmed();
+        auto *btn = new QPushButton(shortName, this);
+        btn->setCheckable(true);
+        btn->setToolTip(fullName + modeTooltipSuffix);
+        modeGroup->addButton(btn);
+        if (fullName == "PSK / BPSK31") {
+            btn->setChecked(true);
+        }
+        modeGrid->addWidget(btn, i % kGridRows, i / kGridRows);
+    }
+    rightLayout->addLayout(modeGrid);
+    rightLayout->addStretch();
+    outerLayout->addWidget(rightColumn);
+
     return bar;
 }
 
