@@ -123,6 +123,18 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "PSKedge - coherent, weak-signal-capable P
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_FILE_NAME "pskedge-${PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
 
+# CPACK_RESOURCE_FILE_LICENSE is picked up by the WiX generator (a .txt
+# is auto-converted to RTF for the MSI license-acceptance page - see
+# https://cmake.org/cmake/help/latest/cpack_gen/wix.html) so this alone
+# is what makes the Windows installer show a click-through EULA. Debian
+# packages don't have an equivalent interactive license step (dpkg/apt
+# just install; there's no MSI-style acceptance dialog), so the DEB
+# package instead gets the license file installed into its standard
+# documentation location below, for anyone who wants to read it - this
+# is the conventional Debian approach, not a workaround.
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+install(FILES LICENSE.txt DESTINATION share/doc/pskedge)
+
 if(UNIX AND NOT APPLE)
     set(CPACK_GENERATOR "DEB")
     set(CPACK_DEBIAN_PACKAGE_SECTION "hamradio")

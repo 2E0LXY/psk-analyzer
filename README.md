@@ -134,5 +134,12 @@ The workflow runs on pushes, pull requests, version tags, and manual
 `workflow_dispatch`. Build artifacts are uploaded as:
 
 - `pskedge-deb`, containing the Debian-compatible `.deb` package.
-- `pskedge-windows`, containing the Windows `.exe` plus deployed Qt runtime
-  files.
+- `pskedge-windows`, containing the Windows `.msi` installer.
+
+## License
+
+PSKedge is proprietary software - see [`LICENSE.txt`](LICENSE.txt) for the
+full terms. The source is publicly visible on GitHub for transparency and
+review, but that visibility does not itself grant any license to copy,
+modify, or redistribute it; all rights not expressly granted in
+`LICENSE.txt` are reserved.
