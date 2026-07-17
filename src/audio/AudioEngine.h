@@ -50,6 +50,10 @@ signals:
     void rxSpectrumReady(const QVector<double> &levels);
     void txStarted();
     void txFinished();
+    // Polled from the sample buffer at the sink's actual playback
+    // position (see publishTxLevel()) - a real, time-varying meter of
+    // what's actually being transmitted, not a static/one-shot value.
+    void txLevelChanged(double rms, double peak);
 
 private slots:
     void readRxAudio();
@@ -61,6 +65,7 @@ private:
     QAudioDevice selectedOutputDevice() const;
     void runRxDemodulator();
     void publishRxSpectrum();
+    void publishTxLevel();
 
     QAudioSink *m_sink = nullptr;
     QAudioSource *m_source = nullptr;
@@ -69,6 +74,14 @@ private:
     QTimer m_rxDemodTimer;
     QElapsedTimer m_rxLevelClock;
     QElapsedTimer m_rxSpectrumClock;
+
+    // The raw (pre-16-bit-PCM) samples being transmitted, kept so
+    // publishTxLevel() can compute a real RMS/peak from whatever segment
+    // is actually playing right now (via m_sink->processedUSecs()),
+    // rather than a single static value computed once when TX starts.
+    std::vector<double> m_txSamples;
+    double m_txSampleRate = 8000.0;
+    QTimer m_txLevelTimer;
 
     double m_rxTargetHz = 1000.0;
     double m_rxSampleRate = 8000.0;

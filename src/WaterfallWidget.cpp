@@ -8,7 +8,7 @@
 WaterfallWidget::WaterfallWidget(QWidget *parent)
     : QWidget(parent)
 {
-    setMinimumSize(520, 320);
+    setMinimumSize(400, 180);
 }
 
 void WaterfallWidget::paintEvent(QPaintEvent *)

@@ -9,6 +9,8 @@
 #include <QApplication>
 #include <QButtonGroup>
 #include <QComboBox>
+#include <QFrame>
+#include <QScrollArea>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -38,7 +40,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     loadSettings();
 
-    setWindowTitle("PSKedge v0.2.0 beta");
+    setWindowTitle("PSKedge v0.3.0 beta");
     resize(1480, 900);
 
     auto *settingsAction = new QAction("Setup", this);
@@ -80,6 +82,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_audioEngine, &AudioEngine::rxSpectrumReady, this, &MainWindow::handleRxSpectrumReady);
     connect(m_audioEngine, &AudioEngine::txStarted, this, &MainWindow::handleTxStarted);
     connect(m_audioEngine, &AudioEngine::txFinished, this, &MainWindow::handleTxFinished);
+    connect(m_audioEngine, &AudioEngine::txLevelChanged, this, &MainWindow::handleTxLevel);
     m_audioEngine->setDevices(m_config.audio.rxInputDeviceId, m_config.audio.txOutputDeviceId);
     m_liveRxLine.channel = 1;
     m_liveRxLine.mode = "BPSK31";
@@ -119,7 +122,23 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addWidget(buildSelectedQsoPanel());
     mainLayout->addWidget(buildTxPanel());
     mainLayout->addWidget(buildWorkflowPanel());
-    setCentralWidget(central);
+
+    // Wrapped in a QScrollArea rather than set as the central widget
+    // directly: without this, QMainWindow's central widget area cannot be
+    // resized smaller than the cumulative minimum-size-hint of everything
+    // stacked inside it, which had grown to ~1055px tall (confirmed by
+    // measuring MainWindow::minimumSize() directly, not assumed) - taller
+    // than common laptop screens (1366x768), making the window
+    // effectively stuck oversized with no way to shrink it to fit. A
+    // QScrollArea with setWidgetResizable(true) lets the window shrink to
+    // any size the user drags it to; scrollbars only appear if it's made
+    // smaller than the content actually needs, rather than the resize
+    // itself being blocked.
+    auto *scrollArea = new QScrollArea(this);
+    scrollArea->setWidget(central);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    setCentralWidget(scrollArea);
 
     setStyleSheet(R"(
         QMainWindow, QWidget { background: #0b1017; color: #d8f7ff; }
@@ -188,10 +207,8 @@ QWidget *MainWindow::buildTopBar()
     leftLayout->setContentsMargins(0, 0, 0, 0);
 
     const QStringList bands = {"160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"};
-    constexpr int kGridRows = 5; // both grids target this many rows so the
-                                 // two columns line up visually either
-                                 // side of the frequency display
-    constexpr int kBandColumns = 2; // 10 bands / 5 rows = 2 columns exactly
+    constexpr int kBandColumns = 3; // fewer rows (4, was 5) to reduce top-bar height
+    constexpr int kBandRows = 4; // ceil(10 / 3)
     auto *bandGrid = new QGridLayout();
     bandGrid->setSpacing(2);
     auto *bandGroup = new QButtonGroup(this);
@@ -206,11 +223,29 @@ QWidget *MainWindow::buildTopBar()
         }
         const QString bandName = bands[i];
         connect(btn, &QPushButton::clicked, this, [this, bandName]() { handleBandChanged(bandName); });
-        bandGrid->addWidget(btn, i % kGridRows, i / kGridRows);
+        bandGrid->addWidget(btn, i % kBandRows, i / kBandRows);
     }
     leftLayout->addLayout(bandGrid);
     leftLayout->addStretch();
     outerLayout->addWidget(leftColumn);
+
+    // --- Left-of-centre: real-time meters filling the space between the
+    // band grid and the frequency display. Every value here is a genuine
+    // measurement from AudioEngine/Bpsk31Codec - there is deliberately no
+    // IMD meter, since IMD is not measurable from audio alone (see
+    // SignalTypes.h / the imdDb field, which stays "n/a" for the same
+    // reason) and a meter that can never show real movement would be
+    // decoration pretending to be instrumentation.
+    auto *leftMeters = new QWidget(this);
+    auto *leftMetersLayout = new QVBoxLayout(leftMeters);
+    leftMetersLayout->setContentsMargins(6, 0, 6, 0);
+    m_snrMeter = new LevelMeter("SNR", this);
+    m_qualityMeter = new LevelMeter("Decode quality", this);
+    leftMetersLayout->addStretch();
+    leftMetersLayout->addWidget(m_snrMeter);
+    leftMetersLayout->addWidget(m_qualityMeter);
+    leftMetersLayout->addStretch();
+    outerLayout->addWidget(leftMeters);
 
     // --- Centre: frequency display ---
     auto *centerColumn = new QWidget(this);
@@ -255,6 +290,17 @@ QWidget *MainWindow::buildTopBar()
         "actually decodable today, selecting anything else does not change what this "
         "app can send or receive yet";
 
+    auto *rightMeters = new QWidget(this);
+    auto *rightMetersLayout = new QVBoxLayout(rightMeters);
+    rightMetersLayout->setContentsMargins(6, 0, 6, 0);
+    m_rxLevelMeter = new LevelMeter("RX audio", this);
+    m_txLevelMeter = new LevelMeter("TX audio", this);
+    rightMetersLayout->addStretch();
+    rightMetersLayout->addWidget(m_rxLevelMeter);
+    rightMetersLayout->addWidget(m_txLevelMeter);
+    rightMetersLayout->addStretch();
+    outerLayout->addWidget(rightMeters);
+
     auto *rightColumn = new QWidget(this);
     auto *rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -262,6 +308,7 @@ QWidget *MainWindow::buildTopBar()
     auto *modeGrid = new QGridLayout();
     modeGrid->setSpacing(2);
     auto *modeGroup = new QButtonGroup(this);
+    constexpr int kModeRows = 3; // ceil(18 / 6) - fewer rows (was 5) to reduce top-bar height
     for (int i = 0; i < modes.size(); ++i) {
         const QString fullName = modes[i];
         const QString shortName = fullName.section('/', 1).trimmed();
@@ -272,7 +319,7 @@ QWidget *MainWindow::buildTopBar()
         if (fullName == "PSK / BPSK31") {
             btn->setChecked(true);
         }
-        modeGrid->addWidget(btn, i % kGridRows, i / kGridRows);
+        modeGrid->addWidget(btn, i % kModeRows, i / kModeRows);
     }
     rightLayout->addLayout(modeGrid);
     rightLayout->addStretch();
@@ -307,7 +354,7 @@ QWidget *MainWindow::buildRightPanel()
 QWidget *MainWindow::buildWorkflowPanel()
 {
     auto *tabs = new QTabWidget(this);
-    tabs->setMaximumHeight(90);
+    tabs->setMaximumHeight(70);
 
     auto *log = new QWidget(this);
     auto *logForm = new QFormLayout(log);
@@ -330,7 +377,7 @@ QWidget *MainWindow::buildRxTranscriptPanel()
     auto *layout = new QVBoxLayout(box);
     m_rxTranscript = new QPlainTextEdit(this);
     m_rxTranscript->setReadOnly(true);
-    m_rxTranscript->setMaximumHeight(70);
+    m_rxTranscript->setMaximumHeight(55);
     m_rxTranscript->setPlaceholderText(
         "Real demodulated audio appears here. Click the waterfall to tune the RX offset - "
         "there is no AFC yet, so this only locks near the clicked frequency.");
@@ -398,7 +445,7 @@ QWidget *MainWindow::buildTxPanel()
 
     m_txText = new QPlainTextEdit(this);
     m_txText->setPlaceholderText("Click a decoded line to insert THEIRCALL DE MYCALL, then type the reply here.");
-    m_txText->setMaximumHeight(110);
+    m_txText->setMaximumHeight(85);
     layout->addWidget(m_txText);
     return box;
 }
@@ -518,15 +565,34 @@ void MainWindow::handleAudioStatus(const QString &status)
 
 void MainWindow::handleRxLevel(double rms, double peak)
 {
-    if (!m_rxLevelLabel) {
-        return;
-    }
-
     const double rmsDb = rms > 0.000001 ? 20.0 * std::log10(rms) : -120.0;
     const int peakPercent = static_cast<int>(std::round(std::clamp(peak, 0.0, 1.0) * 100.0));
-    m_rxLevelLabel->setText(QString("RX level: %1 dBFS / %2%")
-                                .arg(rmsDb, 0, 'f', 1)
-                                .arg(peakPercent));
+    if (m_rxLevelLabel) {
+        m_rxLevelLabel->setText(QString("RX level: %1 dBFS / %2%")
+                                    .arg(rmsDb, 0, 'f', 1)
+                                    .arg(peakPercent));
+    }
+    if (m_rxLevelMeter) {
+        m_rxLevelMeter->setValue(rmsDb, -60.0, 0.0, QString("%1 dBFS").arg(rmsDb, 0, 'f', 0));
+    }
+}
+
+void MainWindow::handleTxLevel(double rms, double peak)
+{
+    Q_UNUSED(peak);
+    if (!m_txLevelMeter) {
+        return;
+    }
+    if (rms <= 0.0) {
+        // stopTx() emits (0,0) as a real "TX has ended" event, not a
+        // measurement - show unavailable rather than a meter pinned at
+        // the bottom, which would read as "extremely quiet transmission"
+        // rather than "not transmitting".
+        m_txLevelMeter->setUnavailable();
+        return;
+    }
+    const double rmsDb = 20.0 * std::log10(rms);
+    m_txLevelMeter->setValue(rmsDb, -30.0, 0.0, QString("%1 dBFS").arg(rmsDb, 0, 'f', 0));
 }
 
 void MainWindow::handleTxStarted()
@@ -566,6 +632,12 @@ void MainWindow::handleRxSignalQuality(double snrDb, double signalLevelDb, doubl
     m_liveRxLine.metrics.qualityPercent = quality;
     m_activeModel->addOrUpdate(m_liveRxLine);
     refreshDecodedLines();
+    if (m_snrMeter) {
+        m_snrMeter->setValue(snrDb, -10.0, 30.0, QString("%1 dB").arg(snrDb, 0, 'f', 1));
+    }
+    if (m_qualityMeter) {
+        m_qualityMeter->setValue(quality, 0.0, 100.0, QString("%1%").arg(quality));
+    }
 }
 
 void MainWindow::handleRxSpectrumReady(const QVector<double> &levels)

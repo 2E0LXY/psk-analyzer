@@ -20,6 +20,8 @@ AudioEngine::AudioEngine(QObject *parent)
 {
     m_rxDemodTimer.setInterval(750);
     connect(&m_rxDemodTimer, &QTimer::timeout, this, &AudioEngine::runRxDemodulator);
+    m_txLevelTimer.setInterval(80);
+    connect(&m_txLevelTimer, &QTimer::timeout, this, &AudioEngine::publishTxLevel);
 }
 
 AudioEngine::~AudioEngine()
@@ -140,6 +142,8 @@ bool AudioEngine::transmitBpsk31(const QString &text, double audioHz)
 
     psk::dsp::Bpsk31Codec codec(config);
     const std::vector<double> samples = codec.modulateText(text.toStdString());
+    m_txSamples = samples;
+    m_txSampleRate = format.sampleRate();
 
     m_txBuffer = new QBuffer(this);
     m_txBuffer->setData(pcm16FromSamples(samples, format.channelCount()));
@@ -152,6 +156,7 @@ bool AudioEngine::transmitBpsk31(const QString &text, double audioHz)
     m_sink = new QAudioSink(output, format, this);
     connect(m_sink, &QAudioSink::stateChanged, this, &AudioEngine::handleSinkStateChanged);
     m_sink->start(m_txBuffer);
+    m_txLevelTimer.start();
     emit txStarted();
     emit statusChanged(QString("TX audio: %1 BPSK31 at %2 Hz").arg(output.description()).arg(config.carrierHz, 0, 'f', 0));
     return true;
@@ -159,6 +164,9 @@ bool AudioEngine::transmitBpsk31(const QString &text, double audioHz)
 
 void AudioEngine::stopTx()
 {
+    m_txLevelTimer.stop();
+    m_txSamples.clear();
+    emit txLevelChanged(0.0, 0.0);
     if (m_sink) {
         m_sink->stop();
         m_sink->deleteLater();
@@ -169,6 +177,37 @@ void AudioEngine::stopTx()
         m_txBuffer->deleteLater();
         m_txBuffer = nullptr;
     }
+}
+
+void AudioEngine::publishTxLevel()
+{
+    if (m_txSamples.empty() || !m_sink) {
+        return;
+    }
+
+    // processedUSecs() is the sink's actual elapsed playback time - map
+    // that to a sample index in m_txSamples so this reflects what's
+    // genuinely playing right now, not just "some window of the buffer".
+    const qint64 processedUsecs = m_sink->processedUSecs();
+    const auto centerIndex = static_cast<std::size_t>(
+        std::max<qint64>(0, processedUsecs) * m_txSampleRate / 1'000'000.0);
+
+    constexpr std::size_t kWindow = 400; // ~9ms at 44.1kHz - short enough to track fast level changes
+    const std::size_t start = centerIndex > kWindow / 2 ? centerIndex - kWindow / 2 : 0;
+    const std::size_t end = std::min(m_txSamples.size(), start + kWindow);
+    if (start >= end) {
+        return;
+    }
+
+    double sumSquares = 0.0;
+    double peak = 0.0;
+    for (std::size_t i = start; i < end; ++i) {
+        const double sample = m_txSamples[i];
+        sumSquares += sample * sample;
+        peak = std::max(peak, std::abs(sample));
+    }
+    const double rms = std::sqrt(sumSquares / static_cast<double>(end - start));
+    emit txLevelChanged(rms, peak);
 }
 
 void AudioEngine::readRxAudio()

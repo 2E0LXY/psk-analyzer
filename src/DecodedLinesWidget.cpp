@@ -6,7 +6,7 @@
 DecodedLinesWidget::DecodedLinesWidget(QWidget *parent)
     : QWidget(parent)
 {
-    setMinimumSize(420, 320);
+    setMinimumSize(350, 180);
 }
 
 void DecodedLinesWidget::setLines(const QVector<DecodeLine> &lines)

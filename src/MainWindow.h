@@ -2,6 +2,7 @@
 
 #include "AppConfig.h"
 #include "DecodedLinesWidget.h"
+#include "LevelMeter.h"
 #include "DecoderTableModel.h"
 #include "SignalTypes.h"
 #include "audio/AudioEngine.h"
@@ -48,6 +49,7 @@ private slots:
     void abortTransmit();
     void handleAudioStatus(const QString &status);
     void handleRxLevel(double rms, double peak);
+    void handleTxLevel(double rms, double peak);
     void handleTxStarted();
     void handleTxFinished();
     void updateTxSafety();
@@ -81,6 +83,10 @@ private:
     DecoderTableModel *m_sweeperModel = nullptr;
     WaterfallWidget *m_waterfall = nullptr;
     DecodedLinesWidget *m_decodedLines = nullptr;
+    LevelMeter *m_snrMeter = nullptr;
+    LevelMeter *m_qualityMeter = nullptr;
+    LevelMeter *m_rxLevelMeter = nullptr;
+    LevelMeter *m_txLevelMeter = nullptr;
     QTableView *m_activeView = nullptr;
     QTableView *m_sweeperView = nullptr;
     QPlainTextEdit *m_txText = nullptr;

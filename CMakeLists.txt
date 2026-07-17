@@ -1,6 +1,18 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PSKedge VERSION 0.2.0 LANGUAGES CXX)
+# This version number drives the actual Windows Installer ProductVersion
+# (see CPACK_PACKAGE_VERSION below) and, combined with the fixed
+# CPACK_WIX_UPGRADE_GUID later in this file, is what Windows Installer
+# uses to detect "this is a newer version, do a proper upgrade" versus
+# "this is the same product already installed, do a repair". It stayed at
+# 0.2.0 across 8 separate tagged releases (each claiming to fix
+# something) because bumping the git tag alone does not bump this - found
+# only when a real install of a 'new' release visibly changed nothing,
+# because Windows Installer had been treating every one of those releases
+# as a repair of the same already-installed 0.2.0 product, not an
+# upgrade. Bump this for every release that should actually replace
+# installed files, not just the git tag.
+project(PSKedge VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +50,8 @@ add_executable(pskedge
     src/DecodedLinesWidget.h
     src/DecoderTableModel.cpp
     src/DecoderTableModel.h
+    src/LevelMeter.cpp
+    src/LevelMeter.h
     src/MacroEngine.cpp
     src/MacroEngine.h
     src/MainWindow.cpp
