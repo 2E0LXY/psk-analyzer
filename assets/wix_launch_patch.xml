@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Adds a "Launch PSKedge now" checkbox to the installer's final page,
+  using WiX's built-in, documented mechanism for this (not custom
+  Dialog/Control XML): setting WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT
+  makes the standard WixUI_InstallDir exit dialog show the checkbox and
+  wire it up automatically - see
+  https://docs.firegiant.com/wix3/howtos/ui_and_localization/run_program_after_install/
+
+  WixShellExecTarget references the installed executable via
+  [INSTALLFOLDER] (the standard directory property WiX's InstallDir UI
+  uses to let the user pick/see the install location) plus the known
+  relative path, rather than the file's own auto-generated Id (which
+  CPack's WiX generator assigns internally and isn't predictable enough
+  to reference reliably without inspecting the actual generated .wxs -
+  something this environment has no WiX toolchain to do). If
+  INSTALLFOLDER turns out not to be what CPack's own template actually
+  calls it, WiX's build step should fail with a clear unresolved-symbol
+  error naming the missing property - much more diagnosable than a
+  silent no-op, and the kind of error this project has successfully
+  iterated against before (see the windeployqt ordering fix and the
+  installer branding collision, both found and fixed from real CI
+  output rather than guessed blind).
+
+  WixShellExec is a built-in custom action provided by WixUtilExtension
+  (BinaryKey "WixCA" is the standard binary key WiX ships that under) -
+  this project doesn't implement any custom action code itself.
+-->
+<CPackWiXPatch>
+  <CPackWiXFragment Id="#PRODUCT">
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch PSKedge now" />
+    <Property Id="WixShellExecTarget" Value="[INSTALLFOLDER]bin\pskedge.exe" />
+    <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+  </CPackWiXFragment>
+</CPackWiXPatch>

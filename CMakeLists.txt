@@ -180,6 +180,18 @@ if(WIN32)
     set(CPACK_WIX_PROPERTY_ARPHELPLINK "https://github.com/2E0LXY/pskedge")
     set(CPACK_WIX_PROPERTY_ARPURLINFOABOUT "https://github.com/2E0LXY/pskedge")
 
+    # "Launch PSKedge now" checkbox on the installer's final page - see
+    # assets/wix_launch_patch.xml for how this works and the specific
+    # uncertainty around INSTALLFOLDER being CPack's actual directory Id
+    # (reasoned from general WiX convention, not confirmed against
+    # CPack's own generated .wxs, which this environment has no WiX
+    # toolchain to inspect). WixUtilExtension provides the WixShellExec
+    # custom action the patch file references, so it must be added to
+    # both candle.exe and light.exe's extension list, not just one -
+    # CPack's WiX v3 generator invokes them as separate steps.
+    set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/assets/wix_launch_patch.xml")
+    set(CPACK_WIX_EXTENSIONS "WixUtilExtension")
+
     # CPACK_WIX_PROGRAM_MENU_FOLDER above only names the Start Menu folder
     # - it does not itself create any shortcut. Actually creating the
     # Start Menu and Desktop shortcuts needs these WiX-generator-specific
