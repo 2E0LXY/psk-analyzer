@@ -246,7 +246,13 @@ bool CatController::setOmniRigFrequency(int rig, double frequencyHz) const
         "$r=$o.Rig%1;"
         "$r.FreqA=%2;"
         "try { $r.Freq=%2 } catch { };"
-        "Start-Sleep -Milliseconds 150;"
+        // A band change is a much larger frequency jump than routine
+        // in-band retuning and can need more time to settle on real
+        // hardware (relay/filter switching, antenna tuner retune) - 150ms
+        // was proving too short, causing the readback below to
+        // intermittently still show the pre-change frequency even though
+        // the rig genuinely did retune correctly just slightly later.
+        "Start-Sleep -Milliseconds 400;"
         "$rx=0;"
         "try { $rx=$r.GetRxFrequency() } catch { $rx=0 };"
         "[Console]::Out.WriteLine('Freq=' + [string]$r.Freq);"
@@ -257,7 +263,31 @@ bool CatController::setOmniRigFrequency(int rig, double frequencyHz) const
                                .arg(hz);
     const QString reply = runPowerShell(script, 2500);
     writeCatLog(QString("OmniRig%1 set frequency %2 -> %3").arg(omniRig).arg(hz).arg(reply));
-    return reply.contains(QString::number(hz));
+
+    // An exact string match against the readback (the previous check) is
+    // fragile: even a genuinely correct readback can be formatted
+    // differently (decimal point, trailing zeros) than QString::number(hz)
+    // produces, and would report a false failure despite the rig having
+    // actually retuned correctly. Parse the readback numerically instead -
+    // same multi-field fallback order as pollOmniRig() - and accept it
+    // within a small tolerance rather than requiring an exact match.
+    QMap<QString, QString> values;
+    for (const QString &line : reply.split('\n', Qt::SkipEmptyParts)) {
+        const int equals = line.indexOf('=');
+        if (equals > 0) {
+            values.insert(line.left(equals).trimmed(), line.mid(equals + 1).trimmed());
+        }
+    }
+    bool freqOk = false;
+    double readbackHz = values.value("RxFrequency").toDouble(&freqOk);
+    if (!freqOk || readbackHz <= 0.0) {
+        readbackHz = values.value("FreqA").toDouble(&freqOk);
+    }
+    if (!freqOk || readbackHz <= 0.0) {
+        readbackHz = values.value("Freq").toDouble(&freqOk);
+    }
+    constexpr double kToleranceHz = 50.0;
+    return freqOk && std::abs(readbackHz - static_cast<double>(hz)) < kToleranceHz;
 #else
     Q_UNUSED(rig);
     Q_UNUSED(frequencyHz);

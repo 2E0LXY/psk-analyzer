@@ -1,0 +1,8 @@
+// Windows resource script - embeds assets/pskedge.ico as pskedge.exe's own
+// icon (shown in Explorer, the taskbar, and inherited by any shortcut that
+// doesn't explicitly override it). Setting CPACK_WIX_PRODUCT_ICON alone
+// (in CMakeLists.txt) only controls the icon shown in Add/Remove Programs -
+// it does NOT embed an icon into the executable itself, so without this,
+// Desktop and Start Menu shortcuts fall back to Windows' generic
+// "blank application" icon regardless of that CPack setting.
+IDI_ICON1 ICON "../assets/pskedge.ico"

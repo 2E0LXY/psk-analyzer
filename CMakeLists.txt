@@ -48,6 +48,7 @@ add_executable(pskedge
     src/WaterfallWidget.cpp
     src/WaterfallWidget.h
     src/main.cpp
+    $<$<PLATFORM_ID:Windows>:src/pskedge.rc>
 )
 
 target_link_libraries(pskedge PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Network psk-core)
