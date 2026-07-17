@@ -159,7 +159,23 @@ if(WIN32)
         set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}/assets/installer_header.bmp")
         set(CPACK_NSIS_MUI_HEADERIMAGE "${CMAKE_SOURCE_DIR}/assets/installer_header.bmp")
     endif()
-    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
+    # CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP is deliberately NOT set here.
+    # Setting it caused a real Windows CI failure that blocked every
+    # installer build: "File: ...assets/installer_welcome.bmp -> no files
+    # found" inside NSIS's MUI_WELCOMEFINISHPAGE_INIT macro, aborting
+    # script compilation entirely - even though the file exists at exactly
+    # that path (verified via the GitHub API against the pushed commit,
+    # not assumed) and the header banner bitmap, set the same way just
+    # below, does not hit this. MUI2's welcome/finish bitmap macro appears
+    # to load its image through a different (install-time $PLUGINSDIR
+    # copy) mechanism than the header banner, and that mechanism is
+    # failing for a reason not yet root-caused - this needs either a real
+    # Windows+NSIS environment to iterate on directly (much faster than
+    # the ~3 minute CI round trip this was debugged through) or someone
+    # more familiar with NSIS MUI2 internals. Left disabled rather than
+    # keep guessing blind and burning further CI runs - the installer
+    # builds and works without this one decorative sidebar image.
+    if(FALSE AND EXISTS "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
         set(CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
         set(CPACK_NSIS_MUI_UNWELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
     endif()
