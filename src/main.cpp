@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QMetaType>
 #include <QPixmap>
+#include <QScreen>
 #include <QSplashScreen>
 
 int main(int argc, char *argv[])
@@ -27,14 +28,18 @@ int main(int argc, char *argv[])
     if (QFile::exists(splashPath)) {
         QPixmap splashPixmap(splashPath);
         if (!splashPixmap.isNull()) {
-            // The shipped splash.png is a full marketing-size graphic
-            // (1672x941) - shown at native resolution it would dominate
-            // most screens. Scale to a conventional splash-screen width,
-            // preserving aspect ratio, rather than assuming the source
-            // image is already splash-sized.
-            constexpr int kMaxSplashWidth = 640;
-            if (splashPixmap.width() > kMaxSplashWidth) {
-                splashPixmap = splashPixmap.scaledToWidth(kMaxSplashWidth, Qt::SmoothTransformation);
+            // Scale relative to the actual screen size rather than a fixed
+            // pixel width, so it looks appropriately large on a real
+            // display without hardcoding another number that's either too
+            // big for a small screen or too small for a large one. Capped
+            // at the source image's own resolution - never upscale past
+            // native and introduce blur.
+            int targetWidth = splashPixmap.width();
+            if (const QScreen *screen = QGuiApplication::primaryScreen()) {
+                targetWidth = qMin(splashPixmap.width(), static_cast<int>(screen->availableGeometry().width() * 0.6));
+            }
+            if (splashPixmap.width() > targetWidth) {
+                splashPixmap = splashPixmap.scaledToWidth(targetWidth, Qt::SmoothTransformation);
             }
             splash = new QSplashScreen(splashPixmap);
             splash->show();
