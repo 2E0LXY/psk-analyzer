@@ -133,51 +133,43 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(WIN32)
-    # NSIS produces a real Setup.exe installer (Start Menu shortcut,
-    # uninstaller, install-directory picker) rather than a raw folder to
-    # unzip. Requires makensis to be available on the build machine/CI
-    # runner (installed separately - see .github/workflows/build.yml).
-    set(CPACK_GENERATOR "NSIS")
+    # MSI via the WiX Toolset instead of NSIS. Switched after NSIS's
+    # MUI2 dynamically-loaded bitmap macros (MUI_HEADERIMAGE_INIT,
+    # MUI_WELCOMEFINISHPAGE_INIT) failed installer compilation with "no
+    # files found" for files confirmed to exist at the referenced path -
+    # see git history for the investigation. MSI is also the more
+    # standard Windows installer format (Programs and Features integration,
+    # Group Policy deployment support) than an NSIS-produced Setup.exe.
+    #
+    # CPack's default is WiX Toolset v3 (candle.exe/light.exe), which is
+    # what ships pre-installed on GitHub's windows-2022 runner image - not
+    # assumed, checked via a diagnostic step in the CI workflow before
+    # relying on it. Not explicitly setting CPACK_WIX_VERSION here to use
+    # that default rather than pin a version this project hasn't verified.
+    set(CPACK_GENERATOR "WIX")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "PSKedge")
-    set(CPACK_NSIS_PACKAGE_NAME "PSKedge")
-    set(CPACK_NSIS_DISPLAY_NAME "PSKedge")
-    set(CPACK_NSIS_EXECUTABLES_DIRECTORY "bin")
-    set(CPACK_NSIS_CREATE_ICONS_EXTRA "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\PSKedge.lnk' '$INSTDIR\\\\bin\\\\pskedge.exe'")
-    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\PSKedge.lnk'")
-    set(CPACK_NSIS_MODIFY_PATH OFF)
-    set(CPACK_NSIS_CONTACT "2E0LXY")
-    set(CPACK_NSIS_HELP_LINK "https://github.com/2E0LXY/pskedge")
-    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/2E0LXY/pskedge")
+    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/assets/pskedge.ico")
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER "PSKedge")
+    set(CPACK_WIX_PROPERTY_ARPHELPLINK "https://github.com/2E0LXY/pskedge")
+    set(CPACK_WIX_PROPERTY_ARPURLINFOABOUT "https://github.com/2E0LXY/pskedge")
 
-    # Installer branding images (header banner, welcome/finish sidebar) are
-    # deliberately NOT set here. Both were tried and both failed real
-    # Windows CI builds identically: "File: ...assets/installer_*.bmp ->
-    # no files found" inside NSIS's MUI_HEADERIMAGE_INIT and
-    # MUI_WELCOMEFINISHPAGE_INIT macros respectively, aborting NSIS script
-    # compilation - confirmed across two separate CI runs, each disabling
-    # one bitmap in turn, not assumed from a single failure. The file
-    # exists at exactly the referenced path in both cases (verified via
-    # the GitHub API against the pushed commit). Both MUI2 macros appear
-    # to load their image through the same install-time ($PLUGINSDIR-copy,
-    # based on the "_INIT" macro naming) mechanism, and whatever's failing
-    # there isn't something worth continuing to guess at from this
-    # environment - each round trip through real Windows CI costs several
-    # minutes against a problem that would take seconds to iterate on with
-    # a real local Windows+NSIS setup. CPACK_NSIS_MUI_ICON below uses an
-    # architecturally different (NSIS resource-compile-time, not a
-    # runtime File load) mechanism and is left enabled - untested in
-    # isolation, but not implicated in either failure above.
-    if(FALSE AND EXISTS "${CMAKE_SOURCE_DIR}/assets/installer_header.bmp")
-        set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}/assets/installer_header.bmp")
-        set(CPACK_NSIS_MUI_HEADERIMAGE "${CMAKE_SOURCE_DIR}/assets/installer_header.bmp")
+    # Upgrade GUID must stay IDENTICAL across every future release - it's
+    # how Windows Installer recognises "this is an update to an existing
+    # install" rather than a conflicting parallel install. Generated once
+    # (a real random UUID, not a hand-typed placeholder) and must never be
+    # regenerated or changed after this.
+    set(CPACK_WIX_UPGRADE_GUID "CD3190DF-98B2-402F-934D-A21D8A1EEAC6")
+
+    # Installer branding images - optional, matching the same
+    # exists-check pattern used elsewhere in this file so the installer
+    # still builds (just unbranded) if these haven't been added yet.
+    # WiX's required dimensions differ from NSIS's and are documented in
+    # assets/README.md.
+    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/wix_banner.bmp")
+        set(CPACK_WIX_UI_BANNER "${CMAKE_SOURCE_DIR}/assets/wix_banner.bmp")
     endif()
-    if(FALSE AND EXISTS "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
-        set(CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
-        set(CPACK_NSIS_MUI_UNWELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/assets/installer_welcome.bmp")
-    endif()
-    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/pskedge.ico")
-        set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/assets/pskedge.ico")
-        set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/assets/pskedge.ico")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/wix_dialog.bmp")
+        set(CPACK_WIX_UI_DIALOG "${CMAKE_SOURCE_DIR}/assets/wix_dialog.bmp")
     endif()
 endif()
 

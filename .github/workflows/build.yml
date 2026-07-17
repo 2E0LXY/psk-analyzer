@@ -35,7 +35,7 @@ jobs:
             configure: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
             build: cmake --build build --config Release --parallel
             package: cmake --build build --target package --config Release
-            artifact_path: build/pskedge-*.exe
+            artifact_path: build/pskedge-*.msi
 
     steps:
       - name: Checkout
@@ -55,10 +55,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake dpkg-dev fakeroot ninja-build qt6-base-dev qt6-multimedia-dev
 
-      - name: Install NSIS
+      - name: Check for WiX Toolset
         if: runner.os == 'Windows'
-        run: choco install nsis -y --no-progress
-        shell: cmd
+        shell: pwsh
+        run: |
+          $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+          $light = Get-Command light.exe -ErrorAction SilentlyContinue
+          if ($candle -and $light) {
+            Write-Host "WiX Toolset v3 found: candle at $($candle.Source), light at $($light.Source)"
+          } else {
+            Write-Host "WiX Toolset v3 (candle.exe/light.exe) not found on PATH - installing via Chocolatey"
+            choco install wixtoolset -y --no-progress
+          }
 
       - name: Configure
         shell: bash
@@ -76,12 +84,12 @@ jobs:
         shell: bash
         run: ${{ matrix.package }}
 
-      - name: Show NSIS log on failure
+      - name: Show CPack/WiX logs on failure
         if: failure() && runner.os == 'Windows'
         shell: bash
         run: |
-          echo "Package step failed - dumping NSISOutput.log (CPack only prints its path, not its content, so failures here are otherwise undiagnosable from CI output alone):"
-          find build -iname "NSISOutput.log" -exec cat {} \;
+          echo "Package step failed - searching for any CPack/WiX log files (WiX's candle/light tools usually print errors directly to CPack's own output, unlike NSIS's separate log file, but checking anyway in case something is hidden):"
+          find build -iname "*.log" -newer CMakeLists.txt -exec echo "--- {} ---" \; -exec cat {} \;
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -108,7 +116,7 @@ jobs:
         with:
           files: |
             artifacts/pskedge-deb/*.deb
-            artifacts/pskedge-windows/pskedge-*.exe
+            artifacts/pskedge-windows/pskedge-*.msi
           generate_release_notes: true
           draft: false
           prerelease: true
