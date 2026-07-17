@@ -70,6 +70,8 @@ target_link_libraries(psk-core-selftest PRIVATE psk-core)
 
 add_test(NAME psk-core-selftest COMMAND psk-core-selftest)
 
+install(TARGETS pskedge RUNTIME DESTINATION bin)
+
 if(WIN32)
     set_target_properties(pskedge PROPERTIES WIN32_EXECUTABLE ON)
 
@@ -80,6 +82,19 @@ if(WIN32)
     # an installer). windeployqt normally lives alongside qmake in the Qt
     # bin directory - Qt6_DIR points at <QtRoot>/lib/cmake/Qt6, so the Qt
     # bin directory is three levels up from there.
+    #
+    # This MUST come after install(TARGETS pskedge ...) above: CMake runs
+    # install() rules in the order they appear in this file, and
+    # windeployqt needs pskedge.exe to already be sitting in the staged
+    # install/CPack tree before it can deploy DLLs next to it. An earlier
+    # version of this file got that ordering backwards despite this same
+    # comment already warning about it - CPack failed on the real Windows
+    # CI runner with '"...\bin\pskedge.exe" does not exist' because the
+    # windeployqt install(CODE) block ran before install(TARGETS pskedge)
+    # had copied the executable into place. Verify the actual file order
+    # (grep '^install\|^if(WIN32)' this file) rather than trusting a
+    # comment describes what the code actually does, which is exactly how
+    # this got missed the first time.
     get_target_property(_qt_qmake_location Qt6::qmake IMPORTED_LOCATION)
     if(_qt_qmake_location)
         get_filename_component(_qt_bin_dir "${_qt_qmake_location}" DIRECTORY)
@@ -100,8 +115,6 @@ if(WIN32)
         message(WARNING "windeployqt not found - the installed/packaged executable will be missing Qt runtime DLLs unless deployed separately")
     endif()
 endif()
-
-install(TARGETS pskedge RUNTIME DESTINATION bin)
 
 set(CPACK_PACKAGE_NAME "pskedge")
 set(CPACK_PACKAGE_VENDOR "2E0LXY")
