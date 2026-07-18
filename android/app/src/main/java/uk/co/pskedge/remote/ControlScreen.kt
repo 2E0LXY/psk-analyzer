@@ -89,7 +89,7 @@ fun ControlScreen(viewModel: RemoteViewModel) {
         // Poor-to-good colour scale, same convention as the desktop's
         // LevelMeter widget (LevelMeter.cpp): red at 0, green at 1.0.
         MeterRow("SNR", fractionForRange(state.snrDb, -10.0, 30.0), "%.1f dB".format(state.snrDb))
-        MeterRow("Decode quality", state.qualityPercent / 100.0, "${state.qualityPercent}%")
+        MeterRow("Decode quality", (state.qualityPercent / 100.0).toFloat(), "${state.qualityPercent}%")
         MeterRow("RX audio", fractionForRange(state.rxLevelDb, -60.0, 0.0), "%.0f dBFS".format(state.rxLevelDb))
         MeterRow(
             "TX audio",
