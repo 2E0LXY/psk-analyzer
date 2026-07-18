@@ -41,6 +41,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check version matches release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          TAG_VERSION="${TAG_VERSION%%-*}"
+          CMAKE_VERSION=$(sed -n 's/.*project(PSKedge VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "Git tag version: $TAG_VERSION"
+          echo "CMakeLists.txt PROJECT_VERSION: $CMAKE_VERSION"
+          if [ "$TAG_VERSION" != "$CMAKE_VERSION" ]; then
+            echo "::error::Version mismatch: git tag says $TAG_VERSION but CMakeLists.txt's PROJECT_VERSION is $CMAKE_VERSION. This exact mismatch previously caused 8+ releases in a row to silently not update anything on a real install - Windows Installer treats an unchanged ProductVersion as 'already installed' and runs a Repair instead of an Upgrade, which does not reliably replace every file. Bump project(PSKedge VERSION ...) in CMakeLists.txt to match the tag before releasing."
+            exit 1
+          fi
+          echo "Version check passed: $TAG_VERSION matches CMakeLists.txt"
+
       - name: Install Qt
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
