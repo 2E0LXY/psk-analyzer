@@ -12,14 +12,14 @@ cmake_minimum_required(VERSION 3.21)
 # as a repair of the same already-installed 0.2.0 product, not an
 # upgrade. Bump this for every release that should actually replace
 # installed files, not just the git tag.
-project(PSKedge VERSION 0.4.2 LANGUAGES CXX)
+project(PSKedge VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 enable_testing()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia Network WebSockets)
 
 add_library(psk-core
     src/dsp/BlockSyncCodec.cpp
@@ -62,10 +62,12 @@ add_executable(pskedge
     src/WaterfallWidget.cpp
     src/WaterfallWidget.h
     src/main.cpp
+    src/remote/RemoteControlServer.cpp
+    src/remote/RemoteControlServer.h
     $<$<PLATFORM_ID:Windows>:src/pskedge.rc>
 )
 
-target_link_libraries(pskedge PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Network psk-core)
+target_link_libraries(pskedge PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Network Qt6::WebSockets psk-core)
 
 # Copy assets/ (splash screen image, if present - see assets/README.md)
 # next to the built executable, and again at install time, so

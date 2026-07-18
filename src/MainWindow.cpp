@@ -52,7 +52,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     loadSettings();
 
-    setWindowTitle("PSKedge v0.4.2 beta");
+    setWindowTitle("PSKedge v0.5.0 beta");
     resize(1480, 900);
 
     auto *settingsAction = new QAction("Setup", this);
@@ -96,6 +96,25 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_audioEngine, &AudioEngine::txStarted, this, &MainWindow::handleTxStarted);
     connect(m_audioEngine, &AudioEngine::txFinished, this, &MainWindow::handleTxFinished);
     connect(m_audioEngine, &AudioEngine::txLevelChanged, this, &MainWindow::handleTxLevel);
+
+    m_remoteServer = new RemoteControlServer(this);
+    connect(m_remoteServer, &RemoteControlServer::statusChanged, this, &MainWindow::handleAudioStatus);
+    connect(m_remoteServer, &RemoteControlServer::bandChangeRequested, this, &MainWindow::handleBandChanged);
+    connect(m_remoteServer, &RemoteControlServer::afcToggleRequested, this, [this](bool enabled) {
+        if (m_afcButton) {
+            m_afcButton->setChecked(enabled);
+        }
+    });
+    connect(m_remoteServer, &RemoteControlServer::macroRequested, this, &MainWindow::handleRemoteMacro);
+    connect(m_remoteServer, &RemoteControlServer::txTextRequested, this, &MainWindow::handleRemoteTxText);
+    connect(m_remoteServer, &RemoteControlServer::abortTxRequested, this, &MainWindow::abortTransmit);
+    connect(m_remoteServer, &RemoteControlServer::stateRequested, this, &MainWindow::broadcastRemoteState);
+    if (m_config.remote.enabled && !m_config.remote.authToken.isEmpty()) {
+        m_remoteServer->start(static_cast<quint16>(m_config.remote.port), m_config.remote.authToken);
+    }
+    m_remoteStateTimer.setInterval(1000);
+    connect(&m_remoteStateTimer, &QTimer::timeout, this, &MainWindow::broadcastRemoteState);
+    m_remoteStateTimer.start();
     m_audioEngine->setDevices(m_config.audio.rxInputDeviceId, m_config.audio.txOutputDeviceId);
     m_liveRxLine.channel = 1;
     m_liveRxLine.mode = "BPSK31";
@@ -589,6 +608,12 @@ void MainWindow::openSettings()
         }
         updateStatusLabels();
         updateTxSafety();
+        if (m_remoteServer) {
+            m_remoteServer->stop();
+            if (m_config.remote.enabled && !m_config.remote.authToken.isEmpty()) {
+                m_remoteServer->start(static_cast<quint16>(m_config.remote.port), m_config.remote.authToken);
+            }
+        }
     }
 }
 
@@ -596,6 +621,33 @@ void MainWindow::insertMacro(const QString &macroText)
 {
     const QString expanded = MacroEngine::expand(macroText, m_config, m_selectedLine);
     m_txText->insertPlainText(expanded);
+}
+
+void MainWindow::handleRemoteMacro(const QString &text)
+{
+    // Unlike the desktop macro buttons (insert only, operator reviews
+    // then taps Send separately), a remote one-tap action inserts and
+    // transmits immediately - the whole point of a phone-based quick
+    // macro is not needing a second confirmation step on a different
+    // screen.
+    insertMacro(text);
+    transmitComposer();
+}
+
+void MainWindow::handleRemoteTxText(const QString &text)
+{
+    m_txText->setPlainText(text);
+    transmitComposer();
+}
+
+void MainWindow::broadcastRemoteState()
+{
+    if (!m_remoteServer || !m_remoteServer->isListening()) {
+        return;
+    }
+    m_remoteServer->broadcastState(m_currentBand, QStringLiteral("BPSK31"), m_catFrequencyHz, m_afcButton && m_afcButton->isChecked(),
+                                    m_catConnected, m_txActive, m_liveRxLine.metrics.snrDb,
+                                    m_liveRxLine.metrics.qualityPercent, m_lastRxLevelDb, m_lastTxLevelDb);
 }
 
 void MainWindow::transmitComposer()
@@ -638,6 +690,7 @@ void MainWindow::handleAudioStatus(const QString &status)
 void MainWindow::handleRxLevel(double rms, double peak)
 {
     const double rmsDb = rms > 0.000001 ? 20.0 * std::log10(rms) : -120.0;
+    m_lastRxLevelDb = rmsDb;
     const int peakPercent = static_cast<int>(std::round(std::clamp(peak, 0.0, 1.0) * 100.0));
     if (m_rxLevelLabel) {
         m_rxLevelLabel->setText(QString("RX level: %1 dBFS / %2%")
@@ -652,6 +705,9 @@ void MainWindow::handleRxLevel(double rms, double peak)
 void MainWindow::handleTxLevel(double rms, double peak)
 {
     Q_UNUSED(peak);
+    if (rms <= 0.0) {
+        m_lastTxLevelDb = -120.0;
+    }
     if (!m_txLevelMeter) {
         return;
     }
@@ -664,11 +720,13 @@ void MainWindow::handleTxLevel(double rms, double peak)
         return;
     }
     const double rmsDb = 20.0 * std::log10(rms);
+    m_lastTxLevelDb = rmsDb;
     m_txLevelMeter->setValue(rmsDb, -30.0, 0.0, QString("%1 dBFS").arg(rmsDb, 0, 'f', 0));
 }
 
 void MainWindow::handleTxStarted()
 {
+    m_txActive = true;
     if (m_sendButton) {
         m_sendButton->setEnabled(false);
     }
@@ -685,6 +743,7 @@ void MainWindow::handleTxStarted()
 
 void MainWindow::handleTxFinished()
 {
+    m_txActive = false;
     if (m_catController && m_config.cat.pttMethod.compare("CAT", Qt::CaseInsensitive) == 0) {
         emit requestCatSetPtt(false);
     }
@@ -740,6 +799,7 @@ void MainWindow::applyDisplayedFrequency(double frequencyHz)
 
 void MainWindow::handleCatSnapshot(const CatSnapshot &snapshot)
 {
+    m_catConnected = snapshot.connected;
     if (!snapshot.connected) {
         return;
     }
@@ -749,6 +809,7 @@ void MainWindow::handleCatSnapshot(const CatSnapshot &snapshot)
 
 void MainWindow::handleBandChanged(const QString &band)
 {
+    m_currentBand = band;
     const QMap<QString, double> pskDialHz = {
         {"160m", 1838000.0},
         {"80m", 3580000.0},
@@ -810,6 +871,9 @@ void MainWindow::handleCatFrequencyResult(bool ok, double frequencyHz)
 
 void MainWindow::handleRxTextDecoded(const QString &text)
 {
+    if (m_remoteServer) {
+        m_remoteServer->broadcastRxText(text);
+    }
     if (m_rxTranscript) {
         if (text.startsWith(m_liveRxLine.text) && text.size() > m_liveRxLine.text.size()) {
             m_rxTranscript->insertPlainText(text.mid(m_liveRxLine.text.size()));

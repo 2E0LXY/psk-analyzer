@@ -61,14 +61,14 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.7.3"
-          modules: qtmultimedia
+          modules: qtmultimedia qtwebsockets
           cache: true
 
       - name: Install Linux build tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake dpkg-dev fakeroot ninja-build qt6-base-dev qt6-multimedia-dev
+          sudo apt-get install -y build-essential cmake dpkg-dev fakeroot ninja-build qt6-base-dev qt6-multimedia-dev qt6-websockets-dev
 
       - name: Check for WiX Toolset
         if: runner.os == 'Windows'
@@ -111,6 +111,32 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  android:
+    name: Android Remote App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pskedge-remote-android
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
   release:

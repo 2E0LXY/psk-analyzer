@@ -7,6 +7,7 @@
 #include "SignalTypes.h"
 #include "audio/AudioEngine.h"
 #include "cat/CatController.h"
+#include "remote/RemoteControlServer.h"
 
 #include <QLabel>
 #include <QMainWindow>
@@ -14,6 +15,7 @@
 #include <QPushButton>
 #include <QTableView>
 #include <QThread>
+#include <QTimer>
 #include <QVector>
 
 class WaterfallWidget;
@@ -44,6 +46,9 @@ private slots:
     void handleSweeperClick(const QModelIndex &index);
     void handleWaterfallClick(double audioHz);
     void handleAfcTargetChanged(double audioHz);
+    void handleRemoteMacro(const QString &text);
+    void handleRemoteTxText(const QString &text);
+    void broadcastRemoteState();
     void openSettings();
     void insertMacro(const QString &macroText);
     void transmitComposer();
@@ -88,6 +93,13 @@ private:
     LevelMeter *m_rxLevelMeter = nullptr;
     LevelMeter *m_txLevelMeter = nullptr;
     QPushButton *m_afcButton = nullptr;
+    RemoteControlServer *m_remoteServer = nullptr;
+    QTimer m_remoteStateTimer;
+    QString m_currentBand = "20m";
+    bool m_catConnected = false;
+    bool m_txActive = false;
+    double m_lastRxLevelDb = -120.0;
+    double m_lastTxLevelDb = -120.0;
     QTableView *m_activeView = nullptr;
     QTableView *m_sweeperView = nullptr;
     QPlainTextEdit *m_txText = nullptr;

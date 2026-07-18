@@ -5,6 +5,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
 
@@ -51,4 +52,7 @@ private:
     QSpinBox *m_pskPower = nullptr;
     QLineEdit *m_antennaName = nullptr;
     QLineEdit *m_antennaType = nullptr;
+    QCheckBox *m_remoteEnabled = nullptr;
+    QSpinBox *m_remotePort = nullptr;
+    QLineEdit *m_remoteToken = nullptr;
 };

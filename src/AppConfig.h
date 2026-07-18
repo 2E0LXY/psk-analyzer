@@ -67,12 +67,23 @@ struct AudioSettings {
     QString txOutputDeviceId;
 };
 
+struct RemoteControlSettings {
+    bool enabled = false;
+    int port = 8765;
+    // Plaintext token, no TLS on the server side - see
+    // RemoteControlServer's header comment. Empty by default so the
+    // server refuses ALL auth attempts (rather than accepting an empty
+    // token) until the operator explicitly sets one.
+    QString authToken;
+};
+
 struct AppConfig {
     StationDetails station;
     CatSettings cat;
     AudioSettings audio;
     EquipmentProfile equipment;
     AntennaProfile antenna;
+    RemoteControlSettings remote;
 };
 
 Q_DECLARE_METATYPE(AppConfig)

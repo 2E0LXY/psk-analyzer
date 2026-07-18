@@ -209,6 +209,28 @@ SettingsDialog::SettingsDialog(const AppConfig &config, QWidget *parent)
     antennaForm->addRow("Antenna type", m_antennaType);
     tabs->addTab(antennaPage, "Antenna");
 
+    auto *remotePage = new QWidget(this);
+    auto *remoteForm = new QFormLayout(remotePage);
+    m_remoteEnabled = new QCheckBox("Enable remote control (Android app)", this);
+    m_remoteEnabled->setChecked(config.remote.enabled);
+    m_remotePort = new QSpinBox(this);
+    m_remotePort->setRange(1024, 65535);
+    m_remotePort->setValue(config.remote.port);
+    m_remoteToken = new QLineEdit(config.remote.authToken);
+    m_remoteToken->setPlaceholderText("Required - the Android app must send this exact token to connect");
+    auto *remoteWarning = new QLabel(
+        "Plaintext, no TLS. Fine on a trusted LAN. For remote/internet access, use a "
+        "VPN or SSH/WireGuard tunnel rather than exposing this port directly - the "
+        "token is the only protection otherwise, and this controls a real "
+        "transmitter.",
+        this);
+    remoteWarning->setWordWrap(true);
+    remoteForm->addRow(m_remoteEnabled);
+    remoteForm->addRow("Port", m_remotePort);
+    remoteForm->addRow("Auth token", m_remoteToken);
+    remoteForm->addRow(remoteWarning);
+    tabs->addTab(remotePage, "Remote");
+
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -252,5 +274,8 @@ AppConfig SettingsDialog::config() const
     updated.equipment.pskPower = m_pskPower->value();
     updated.antenna.name = m_antennaName->text().trimmed();
     updated.antenna.type = m_antennaType->text().trimmed();
+    updated.remote.enabled = m_remoteEnabled->isChecked();
+    updated.remote.port = m_remotePort->value();
+    updated.remote.authToken = m_remoteToken->text().trimmed();
     return updated;
 }
