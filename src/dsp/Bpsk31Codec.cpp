@@ -159,19 +159,37 @@ std::vector<int> Bpsk31Codec::trackWithOffset(const std::vector<double> &samples
     std::vector<int> bits;
     bits.reserve(static_cast<std::size_t>(samples.size() / std::max(1.0, sps)));
 
-    // Matched filter for the raised-cosine (100% roll-off) pulse shape
-    // used by modulateText(). `start` denotes the position of a symbol's
-    // pulse PEAK (matching where modulateText() places it), and the
-    // correlator integrates a window of +/-halfSpan around that peak,
-    // weighted by the same pulse shape - this is the receiver-side match
-    // for the transmitter's shaping filter, which is what "matched filter"
-    // means: correlating against the exact waveform you expect to receive
-    // maximises SNR (matched filter theorem), rather than a filter shaped
-    // for a signal we no longer transmit.
-    const int halfSpan = static_cast<int>(sps);
+    // Cosine-tapered correlator window, one symbol period wide
+    // (+/-halfSpan = +/-sps/2 around the peak). `start` denotes the
+    // position of a symbol's pulse PEAK (matching where modulateText()
+    // places it).
+    //
+    // This was previously +/-sps (two full symbol periods, i.e. reaching
+    // into both neighbouring symbols), reasoned as a literal matched
+    // filter for modulateText()'s own raised-cosine pulse shape (whose
+    // energy naturally tapers to near-zero at that range, so the wider
+    // window was harmless for this transmitter's own signal). That
+    // reasoning turned out to be a real bug for anything else: tested
+    // against a genuine PSK31 reference recording (Wikipedia's
+    // PSK31_sample.ogg) and a clean, noise-free, hand-rolled rectangular-
+    // pulse (unshaped) synthetic signal, and got a complete decode
+    // failure on both, not just reduced SNR - a rectangular-pulse
+    // transmission (unlike this codec's own shaped one) has full,
+    // constant amplitude right up to each symbol boundary, so a window
+    // extending a full symbol into the neighbours was picking up
+    // substantial energy from the ADJACENT symbol's differently-phased
+    // signal, corrupting the phase estimate for real-world signals that
+    // don't happen to be shaped exactly like this transmitter's own.
+    // Narrowed to one symbol period, which cannot reach past its own
+    // symbol's boundary regardless of how the far end is shaped - this
+    // trades some theoretical matched-filter gain against this
+    // transmitter's own raised-cosine signal for actually decoding
+    // signals from other implementations, verified against both the real
+    // recording and the rectangular-pulse test below.
+    const int halfSpan = static_cast<int>(sps / 2.0);
     std::vector<double> pulse(static_cast<std::size_t>(2 * halfSpan + 1));
     for (int k = -halfSpan; k <= halfSpan; ++k) {
-        const double t = static_cast<double>(k) / sps;
+        const double t = static_cast<double>(k) / static_cast<double>(halfSpan);
         pulse[static_cast<std::size_t>(k + halfSpan)] = 0.5 * (1.0 + std::cos(kPi * t));
     }
 

@@ -67,13 +67,22 @@ shaping described above is not a deviation from the PSK31 spec — it is what
 the spec itself describes and what most real-world PSK31 transmitters
 already do.
 
-One honest caveat: PSKedge's receive correlator is matched specifically to
-its own transmitted pulse shape. Decoding a station using a differently-
-shaped (or entirely unshaped/rectangular) transmission may see a small
-reduction in matched-filter gain compared to decoding another PSKedge
-station — this affects margin at the weakest signals, not basic
-compatibility, and PSKedge's coherent tracking still applies regardless of
-the far station's pulse shape.
+Receiver compatibility with other implementations: earlier versions of this
+README claimed decoding a differently-shaped signal "may see a small
+reduction in matched-filter gain" - that was wrong, not just optimistic.
+Testing against a real reference recording (Wikipedia's PSK31_sample.ogg)
+and a clean, noise-free, hand-rolled rectangular-pulse (unshaped) signal
+found the receiver was failing to decode either completely, not with
+reduced margin - the correlator window extended a full symbol period into
+each neighbouring symbol, which was harmless for this transmitter's own
+raised-cosine signal (whose energy naturally tapers to near-zero there)
+but picked up substantial phase-corrupting interference from adjacent
+symbols in any signal that isn't shaped the same way. Narrowed to one
+symbol period (see the comment on `halfSpan` in `Bpsk31Codec::
+trackWithOffset()`), which fixed the rectangular-pulse test case to a
+near-complete decode. The real recording still does not decode cleanly
+after that fix - under active investigation, not resolved, and not
+claimed to be.
 
 PSK128FEC is explicitly not part of this compatibility story: it is a
 different framing, coding, and synchronisation scheme entirely, intended as

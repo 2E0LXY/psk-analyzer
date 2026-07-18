@@ -122,21 +122,24 @@ bool checkImpairmentRecovery(std::string *error)
 
     // Sanity check that there's still a real ceiling (multi-hypothesis
     // acquisition widened it, didn't remove it) and hasn't silently
-    // vanished or silently gotten worse: 20Hz is expected to fail - well
-    // past the ~12-13Hz boundary measured during development. If this
-    // starts passing, the envelope comment needs updating; if something
-    // within the validated +/-10Hz range starts failing, that's a
-    // regression.
+    // vanished or gotten worse: 30Hz is expected to fail - past the
+    // ~20-24Hz boundary measured after narrowing the correlator window to
+    // one symbol period (see the comment on halfSpan in
+    // trackWithOffset() - that change widened the pull-in range from the
+    // previous ~12-13Hz as a side effect, verified by testing a range of
+    // offsets rather than assumed). If this starts passing, the envelope
+    // comment needs updating; if something within the validated +/-10Hz
+    // range starts failing, that's a regression.
     {
         psk::dsp::Bpsk31Config txConfig;
-        txConfig.carrierHz = 1020.0;
+        txConfig.carrierHz = 1030.0;
         const psk::dsp::Bpsk31Codec txCodec(txConfig);
         const std::vector<double> samples = txCodec.modulateText(message);
         const psk::dsp::Bpsk31Codec rxCodec;
         const std::string decoded = rxCodec.demodulateText(samples);
         if (decoded.find(message) != std::string::npos) {
             if (error) {
-                *error = "20Hz offset unexpectedly decoded - envelope comment in "
+                *error = "30Hz offset unexpectedly decoded - envelope comment in "
                     "Bpsk31Codec.cpp is now understating the loop's actual pull-in range";
             }
             return false;
