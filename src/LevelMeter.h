@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QLabel>
 #include <QWidget>
 
@@ -27,6 +28,7 @@ protected:
     QSize minimumSizeHint() const override;
 
 private:
+    QColor colorForFraction(double fraction) const;
     QString m_label;
     QString m_valueText;
     double m_fraction = 0.0;

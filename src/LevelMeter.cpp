@@ -53,9 +53,21 @@ void LevelMeter::paintEvent(QPaintEvent *)
     if (m_available && m_fraction > 0.0) {
         QRect fillRect = barRect.adjusted(1, 1, -1, -1);
         fillRect.setWidth(static_cast<int>(fillRect.width() * m_fraction));
-        QColor fillColor = m_fraction < 0.75 ? QColor(90, 200, 255) : QColor(140, 230, 150);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(fillColor);
+        painter.setBrush(colorForFraction(m_fraction));
         painter.drawRoundedRect(fillRect, 2, 2);
     }
+}
+
+QColor LevelMeter::colorForFraction(double fraction) const
+{
+    // Poor-to-good colour scale: red at 0, yellow at 0.5, green at 1.0.
+    // Two linear segments (red->yellow, yellow->green) rather than a
+    // single interpolation, so 0.5 reads as a clean, recognisable amber.
+    if (fraction < 0.5) {
+        const double t = fraction / 0.5;
+        return QColor(220, static_cast<int>(60 + t * (200 - 60)), 60);
+    }
+    const double t = (fraction - 0.5) / 0.5;
+    return QColor(static_cast<int>(220 - t * (220 - 90)), 200, static_cast<int>(60 + t * (150 - 60)));
 }
