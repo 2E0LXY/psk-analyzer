@@ -133,11 +133,21 @@ zero corruption. The other two still do not decode cleanly:
   same compression round-trip perfectly), matched-filter pulse shape,
   and low SNR (this file measures ~30dB, not marginal).
 - The BARTG sample shows recognisable but incomplete fragments ("RST
-  599", "Dipole" recur consistently rather than being pure noise) and
-  a measured carrier frequency that drifts by ~18Hz across the
-  recording's duration - a different impairment (continuous
-  in-message drift) from the static offset the Costas loop is
-  validated against, not yet addressed.
+  599", "Dipole" recur consistently rather than being pure noise).
+  Confirmed, not just measured indirectly: fixed a real reporting bug
+  where `Bpsk31StreamDecoder::lockedCarrierHz()` returned a value
+  frozen at initial acquisition rather than the Costas loop's actual,
+  continuously-updating tracking estimate. With that fixed, the
+  loop's real-time frequency estimate visibly moves from ~1547Hz to
+  ~1568Hz over the recording's first 8 seconds - a genuine ~20Hz
+  in-message drift, not a static offset. The loop does track it
+  (doesn't diverge or get stuck), but decode quality suffers while
+  actively correcting for it. Whether this is worth chasing further
+  with loop-gain changes (real engineering risk against the validated
+  static-offset envelope) versus accepting as a genuinely difficult
+  case - this much drift within one recording may reflect real
+  oscillator instability in whatever produced it - is an open
+  question, not resolved either way.
 
 Neither is claimed fixed. Both are open, with the specific diagnostic
 evidence recorded here rather than left as a vague "sometimes doesn't

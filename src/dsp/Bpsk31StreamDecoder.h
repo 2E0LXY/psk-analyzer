@@ -44,7 +44,14 @@ public:
     std::string pushSamples(const std::vector<double> &newSamples);
 
     bool isAcquired() const;
-    // Only meaningful once isAcquired() is true.
+    // Only meaningful once isAcquired() is true. Reflects the Costas
+    // loop's actual, continuously-updating tracking (via
+    // Bpsk31TrackState::effectiveStep), not a value frozen at the moment
+    // of initial acquisition - a real signal's residual frequency error
+    // isn't necessarily constant (see FEATURE_ROADMAP.md's note on
+    // apparent in-message carrier drift found in one real test
+    // recording), so a caller using this for AFC or display should see
+    // the loop's actual current estimate, not a stale one.
     double lockedCarrierHz() const;
 
     // Drops all internal state and starts over - e.g. when the operator

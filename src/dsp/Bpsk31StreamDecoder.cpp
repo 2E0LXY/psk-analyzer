@@ -71,7 +71,15 @@ bool Bpsk31StreamDecoder::isAcquired() const
 
 double Bpsk31StreamDecoder::lockedCarrierHz() const
 {
-    return m_codec.config().carrierHz + m_lockedOffsetHz;
+    if (!m_acquired || !m_state.initialized) {
+        return m_codec.config().carrierHz + m_lockedOffsetHz;
+    }
+    // effectiveStep is the Costas loop's current per-sample phase
+    // increment (nominal carrier step plus its ongoing carrierFreqIntegral
+    // correction) - converting back to Hz gives the loop's real, current
+    // tracking estimate, not the value frozen at initial acquisition.
+    constexpr double kTwoPi = 6.28318530717958647692;
+    return m_state.effectiveStep * m_codec.config().sampleRate / kTwoPi;
 }
 
 void Bpsk31StreamDecoder::reset()
