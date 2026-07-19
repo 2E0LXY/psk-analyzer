@@ -1,5 +1,6 @@
 #include "dsp/BlockSyncCodec.h"
 #include "dsp/Bpsk31Codec.h"
+#include "dsp/Bpsk31StreamDecoder.h"
 #include "dsp/ConvCode.h"
 #include "dsp/Crc16.h"
 #include "dsp/CwCodec.h"
@@ -330,6 +331,69 @@ bool checkBlockSyncOffsetAcquisition(std::string *error)
     return true;
 }
 
+bool checkStreamDecoderContinuousReception(std::string *error)
+{
+    // A long message, sent as ONE continuous transmission with a
+    // preamble only at the start - same structure as any real PSK31
+    // transmission (see Bpsk31StreamDecoder's own comment for why this
+    // matters: real off-air recordings, not synthetic tests, are what
+    // exposed that a batch/re-acquire-every-call decoder cannot decode
+    // this at all past the first ~10s, regardless of signal quality).
+    // Long enough that a 10s batch window (the old approach) could not
+    // hold it, so this specifically tests the property that mattered.
+    const std::string message =
+        "CQ CQ CQ DE 2E0LXY 2E0LXY 2E0LXY K THIS IS A LONG CONTINUOUS TEST "
+        "TRANSMISSION WITH ONLY ONE PREAMBLE AT THE START THE QUICK BROWN "
+        "FOX JUMPS OVER THE LAZY DOG SEVERAL TIMES TO PAD OUT THE LENGTH "
+        "OF THIS MESSAGE WELL PAST WHAT A SHORT BATCH WINDOW COULD EVER "
+        "HOLD IN ONE PIECE 73 GL ES 73 DE 2E0LXY SK";
+
+    psk::dsp::Bpsk31Config txConfig;
+    const psk::dsp::Bpsk31Codec txCodec(txConfig);
+    const std::vector<double> samples = txCodec.modulateText(message);
+
+    // ~14s at the default 8kHz/31.25 baud config for this message length -
+    // genuinely longer than the old 10s batch window, not a token amount.
+    if (samples.size() < static_cast<std::size_t>(12.0 * txConfig.sampleRate)) {
+        if (error) {
+            *error = "test message too short to actually exercise continuous "
+                "reception past a 10s batch window - lengthen it";
+        }
+        return false;
+    }
+
+    psk::dsp::Bpsk31Config rxConfig;
+    psk::dsp::Bpsk31StreamDecoder decoder(rxConfig);
+
+    // Deliver in realistic ~750ms chunks (matching AudioEngine's actual
+    // demod timer interval), not the whole signal at once - a decoder
+    // that only works when handed everything in a single call would not
+    // actually validate what this class exists for.
+    const auto chunkSamples = static_cast<std::size_t>(0.75 * rxConfig.sampleRate);
+    std::string finalText;
+    for (std::size_t start = 0; start < samples.size(); start += chunkSamples) {
+        const std::size_t end = std::min(samples.size(), start + chunkSamples);
+        const std::vector<double> chunk(samples.begin() + static_cast<std::ptrdiff_t>(start),
+                                         samples.begin() + static_cast<std::ptrdiff_t>(end));
+        finalText = decoder.pushSamples(chunk);
+    }
+
+    if (!decoder.isAcquired()) {
+        if (error) {
+            *error = "Bpsk31StreamDecoder never acquired lock on a clean synthetic signal";
+        }
+        return false;
+    }
+    if (finalText.find(message) == std::string::npos) {
+        if (error) {
+            *error = "Bpsk31StreamDecoder did not decode the full continuous message "
+                "correctly (decoded: \"" + finalText + "\")";
+        }
+        return false;
+    }
+    return true;
+}
+
 bool checkCwCodecRoundTrip(std::string *error)
 {
     const std::string message = "CQ CQ DE 2E0LXY 2E0LXY K THE QUICK BROWN FOX 73";
@@ -450,6 +514,11 @@ int main()
     if (!checkBlockSyncOffsetAcquisition(&error)) {
         std::cerr << "BlockSyncCodec offset acquisition check failed: " << error << '\n';
         return 10;
+    }
+
+    if (!checkStreamDecoderContinuousReception(&error)) {
+        std::cerr << "Bpsk31StreamDecoder check failed: " << error << '\n';
+        return 12;
     }
 
     if (!checkCwCodecRoundTrip(&error)) {

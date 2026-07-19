@@ -1,7 +1,10 @@
 #pragma once
 
 #include "dsp/Bpsk31Codec.h"
+#include "dsp/Bpsk31StreamDecoder.h"
 #include "dsp/CwCodec.h"
+
+#include <memory>
 
 #include <QAudioDevice>
 #include <QAudioFormat>
@@ -112,47 +115,58 @@ private:
     double m_rxSampleRate = 8000.0;
     int m_rxChannelCount = 1;
     std::vector<double> m_rxSamples;
+    // Separate from m_rxSamples (which is trimmed/retained for the
+    // waterfall spectrum display and shouldn't be repurposed for this).
+    // Accumulates audio not yet handed to m_streamDecoder; drained and
+    // cleared every time runRxDemodulator() successfully feeds it in.
+    std::vector<double> m_newRxSamplesForDecoder;
+    // Persistent across calls - see Bpsk31StreamDecoder's own comment for
+    // why this replaced re-running Bpsk31Codec::demodulateText() over the
+    // whole retained buffer every callback (confirmed against real
+    // off-air-style recordings to be the actual reason continuous real
+    // transmissions weren't decoding, not a tuning/SNR/pulse-shape
+    // problem - see git history). unique_ptr rather than a value member
+    // because it needs to be reset (destroyed and reconstructed with a
+    // fresh carrierHz) whenever the operator manually re-tunes or the
+    // sample rate changes, not just have its fields cleared - a stale
+    // Bpsk31TrackState from a previous frequency should never bleed into
+    // a new one.
+    std::unique_ptr<psk::dsp::Bpsk31StreamDecoder> m_streamDecoder;
     std::string m_rxLastDecoded;
     bool m_rxDemodPending = false;
     QString m_rxInputDeviceId;
     QString m_txOutputDeviceId;
 
-    // Hard cap on retained RX samples. AudioEngine re-runs
-    // Bpsk31Codec::demodulateText() over the ENTIRE retained buffer on
-    // every audio callback (see runRxDemodulator()), because the
-    // demodulator is a batch function with no persisted state between
-    // calls. That makes per-callback cost O(buffer size), not O(new
-    // samples).
+    // Hard cap on retained RX samples for the waterfall spectrum display
+    // (see publishRxSpectrum()) and for CW (which is still a batch
+    // decoder - CwCodec has no streaming equivalent yet, unlike BPSK31).
     //
-    // This was previously capped at 0.75s, which is a real bug, not just
-    // a performance tradeoff: Bpsk31Config::preambleSymbols defaults to
-    // 64, which at 31.25 baud takes 64/31.25 = 2.048 seconds on its own -
-    // longer than the entire retained buffer. That makes it physically
-    // impossible to ever see a complete preamble on continuous real
-    // reception, which is exactly why real off-air testing (DigiPan
-    // decoding cleanly, PSKedge producing only fragments like "en" / "ee"
-    // and constantly re-syncing on the same signal) failed completely
-    // despite passing every synthetic self-test - those pass complete
-    // signals directly to demodulateText(), never going through this
-    // trimmed rolling-buffer path at all. Raised to 10s - measured
-    // worst-case demod time per cycle (10s of pure noise, forcing all 5
-    // acquisition hypotheses through their full tracking pass with
-    // nothing to lock onto) is 251ms, comfortably under the 750ms demod
-    // timer interval (see m_rxDemodTimer) - checked directly with a
-    // standalone timing test, not extrapolated from the old per-second
-    // cost estimate.
+    // This buffer is NOT what BPSK31 decoding reads from any more - see
+    // m_streamDecoder and m_newRxSamplesForDecoder below. It used to be:
+    // every audio callback re-ran Bpsk31Codec::demodulateText() over this
+    // entire buffer, since the demodulator was a stateless batch function
+    // with no persisted state between calls. That was capped at 0.75s at
+    // one point, purely as a performance tradeoff - which turned out to
+    // be a real bug, not just slow: Bpsk31Config::preambleSymbols
+    // defaults to 64, which at 31.25 baud takes 2.048s on its own -
+    // longer than that buffer, making it physically impossible to ever
+    // see a complete preamble. Raising the cap to 10s (this constant)
+    // was a real, measured improvement at the time, but was still only a
+    // workaround: even a 10s batch window fundamentally cannot decode a
+    // continuous real transmission once its one-and-only preamble (real
+    // transmissions don't repeat it) scrolls past the window - confirmed
+    // against real off-air-style recordings (see git history), not
+    // theorised.
     //
-    // The actual, complete fix is making the demodulator loop state
-    // (epochPos, phaseEpoch, carrier/timing integrators, and the 5
-    // acquisition hypotheses) persist across calls so only new samples
-    // are processed each time; that is a larger refactor (demodulateBits
-    // would need to become a stateful streaming object rather than a
-    // pure function) and is flagged here rather than attempted blind.
-    // This fix (a bigger window) makes real reception actually work; it
-    // does not remove the underlying O(buffer size) cost.
-    //
-    // Trimming still loses demodulator continuity at the trim boundary (a
-    // handful of characters may be missed there) - a second known
-    // limitation of the batch-recompute approach.
-    static constexpr std::size_t kMaxRxSamples = 480000; // 10s at 48kHz - see comment above for why 0.75s was actually broken, not just slow
+    // The actual, complete fix is Bpsk31StreamDecoder: the Costas/Gardner
+    // loop state (epochPos, phaseEpoch, carrier/timing integrators)
+    // persists across calls via Bpsk31TrackState once a lock is
+    // acquired, so decoding continues indefinitely from new audio without
+    // ever needing another preamble - this was flagged as a larger
+    // refactor "not attempted blind" in earlier revisions of this
+    // comment, and has since been done and verified against real
+    // recordings (one decoded a repeating test message continuously and
+    // completely for the file's full 40s duration, versus fragments
+    // before).
+    static constexpr std::size_t kMaxRxSamples = 480000; // 10s at 48kHz
 };

@@ -151,7 +151,8 @@ std::vector<double> Bpsk31Codec::modulateText(const std::string &text) const
     return samples;
 }
 
-std::vector<int> Bpsk31Codec::trackWithOffset(const std::vector<double> &samples, double offsetHz) const
+std::vector<int> Bpsk31Codec::trackWithOffset(const std::vector<double> &samples, double offsetHz,
+                                               Bpsk31TrackState *state) const
 {
     const double sps = static_cast<double>(samplesPerSymbol());
     const double carrierStepNominal = 2.0 * kPi * (m_config.carrierHz + offsetHz) / m_config.sampleRate;
@@ -210,17 +211,31 @@ std::vector<int> Bpsk31Codec::trackWithOffset(const std::vector<double> &samples
         return std::complex<double>(iSum, qSum);
     };
 
-    double epochPos = sps;
-    double phaseEpoch = 0.0;
-    double effectiveStep = carrierStepNominal;
-    double carrierFreqIntegral = 0.0;
-    double timingFreqIntegral = 0.0;
-    double symbolStart = sps; // first symbol's pulse peak, matching modulateText()
-
-    double previousPhase = 0.0;
-    bool havePreviousPhase = false;
-    std::complex<double> previousOnTime(0.0, 0.0);
-    bool havePreviousOnTime = false;
+    Bpsk31TrackState localState;
+    Bpsk31TrackState &st = state ? *state : localState;
+    if (!st.initialized) {
+        st.epochPos = sps;
+        st.phaseEpoch = 0.0;
+        st.effectiveStep = carrierStepNominal;
+        st.carrierFreqIntegral = 0.0;
+        st.timingFreqIntegral = 0.0;
+        st.symbolStart = sps; // first symbol's pulse peak, matching modulateText()
+        st.previousPhase = 0.0;
+        st.havePreviousPhase = false;
+        st.previousOnTime = std::complex<double>(0.0, 0.0);
+        st.havePreviousOnTime = false;
+        st.initialized = true;
+    }
+    double &epochPos = st.epochPos;
+    double &phaseEpoch = st.phaseEpoch;
+    double &effectiveStep = st.effectiveStep;
+    double &carrierFreqIntegral = st.carrierFreqIntegral;
+    double &timingFreqIntegral = st.timingFreqIntegral;
+    double &symbolStart = st.symbolStart;
+    double &previousPhase = st.previousPhase;
+    bool &havePreviousPhase = st.havePreviousPhase;
+    std::complex<double> &previousOnTime = st.previousOnTime;
+    bool &havePreviousOnTime = st.havePreviousOnTime;
 
     // Stop when the on-time window (+/-halfSpan around the peak, plus one
     // interpolation sample) would run off either end of the buffer.
@@ -294,6 +309,12 @@ std::vector<int> Bpsk31Codec::trackWithOffset(const std::vector<double> &samples
     }
 
     return bits;
+}
+
+std::vector<int> Bpsk31Codec::trackStreaming(const std::vector<double> &samples, double offsetHz,
+                                              Bpsk31TrackState &state) const
+{
+    return trackWithOffset(samples, offsetHz, &state);
 }
 
 double Bpsk31Codec::scoreDecodedBits(const std::vector<int> &bits) const

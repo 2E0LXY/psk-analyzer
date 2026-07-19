@@ -105,6 +105,8 @@ void AudioEngine::setMode(OperatingMode mode)
     // in-flight demodulator state, which is specific to whichever
     // codec was tracking it.
     m_rxSamples.clear();
+    m_newRxSamplesForDecoder.clear();
+    m_streamDecoder.reset();
     m_rxLastDecoded.clear();
     m_rxDemodPending = false;
 }
@@ -121,6 +123,8 @@ void AudioEngine::setRxTargetHz(double audioHz)
     // demodulator state (oscillator phase relative to buffer start), so
     // start clean rather than mixing bits demodulated at two frequencies.
     m_rxSamples.clear();
+    m_newRxSamplesForDecoder.clear();
+    m_streamDecoder.reset();
     m_rxLastDecoded.clear();
     m_rxDemodPending = false;
 }
@@ -135,6 +139,8 @@ void AudioEngine::stopRx()
     }
     m_rxDevice = nullptr;
     m_rxDemodPending = false;
+    m_newRxSamplesForDecoder.clear();
+    m_streamDecoder.reset();
 }
 
 bool AudioEngine::transmitBpsk31(const QString &text, double audioHz)
@@ -274,6 +280,7 @@ void AudioEngine::readRxAudio()
         sumSquares += value * value;
         peak = std::max(peak, std::abs(value));
         m_rxSamples.push_back(value);
+        m_newRxSamplesForDecoder.push_back(value);
     }
 
     if (!m_rxLevelClock.isValid() || m_rxLevelClock.elapsed() >= 100) {
@@ -368,33 +375,43 @@ void AudioEngine::runRxDemodulator()
         // left at 0 rather than fabricating a reading for a measurement
         // that doesn't exist for this mode.
     } else {
-        psk::dsp::Bpsk31Config config;
-        config.sampleRate = m_rxSampleRate;
-        config.carrierHz = m_rxTargetHz;
-
         // Costas carrier PLL + Gardner symbol-timing recovery + 5-hypothesis
         // frequency acquisition (validated envelope: +/-10Hz carrier offset,
-        // +/-0.1% clock drift - see Bpsk31Codec.cpp). Still not a fully robust
-        // receiver against real off-air noise/QRM - see IMPROVEMENTS.md - but
-        // genuinely tracks moderate real-world impairments now, not just a
-        // perfectly aligned loopback.
-        const psk::dsp::Bpsk31Codec codec(config);
-        if (m_afcEnabled) {
-            const psk::dsp::Bpsk31DemodResult result = codec.demodulateTextWithLock(m_rxSamples);
-            decoded = result.text;
-            // Only trust a genuine lock (see Bpsk31DemodResult::hasLock) to
-            // move the target - nudging based on whichever hypothesis merely
-            // scored highest on noise would walk the target frequency around
-            // randomly with nothing actually being received, which is worse
-            // than staying put.
-            if (result.hasLock && std::abs(result.lockedOffsetHz) > 0.01) {
-                m_rxTargetHz = std::clamp(m_rxTargetHz + result.lockedOffsetHz, 300.0, 3000.0);
+        // +/-0.1% clock drift - see Bpsk31Codec.cpp), now via
+        // Bpsk31StreamDecoder rather than re-running batch demodulation
+        // over the whole retained buffer every call - see that class's
+        // comment for why (confirmed against real recordings: a
+        // continuous transmission's preamble only exists once, at the
+        // very start, so a design that re-requires a fresh preamble in
+        // every processing window cannot decode anything past it,
+        // regardless of signal quality).
+        if (!m_streamDecoder) {
+            psk::dsp::Bpsk31Config config;
+            config.sampleRate = m_rxSampleRate;
+            config.carrierHz = m_rxTargetHz;
+            m_streamDecoder = std::make_unique<psk::dsp::Bpsk31StreamDecoder>(config);
+        }
+        decoded = m_streamDecoder->pushSamples(m_newRxSamplesForDecoder);
+        m_newRxSamplesForDecoder.clear();
+
+        if (m_afcEnabled && m_streamDecoder->isAcquired()) {
+            const double lockedHz = std::clamp(m_streamDecoder->lockedCarrierHz(), 300.0, 3000.0);
+            if (std::abs(lockedHz - m_rxTargetHz) > 0.01) {
+                m_rxTargetHz = lockedHz;
                 emit rxTargetHzChanged(m_rxTargetHz);
             }
-        } else {
-            decoded = codec.demodulateText(m_rxSamples);
         }
-        const psk::dsp::Bpsk31SignalQuality quality = codec.measureSignalQuality(m_rxSamples);
+
+        // Signal quality is independent of the streaming decoder's lock
+        // state (a simple in-band vs out-of-band correlator check, not
+        // tied to whether Bpsk31StreamDecoder has actually acquired) -
+        // still measured over the spectrum buffer the same way as
+        // before.
+        psk::dsp::Bpsk31Config qualityConfig;
+        qualityConfig.sampleRate = m_rxSampleRate;
+        qualityConfig.carrierHz = m_rxTargetHz;
+        const psk::dsp::Bpsk31Codec qualityCodec(qualityConfig);
+        const psk::dsp::Bpsk31SignalQuality quality = qualityCodec.measureSignalQuality(m_rxSamples);
         snrDb = quality.snrDb;
         signalLevelDb = quality.signalLevelDb;
         noiseFloorDb = quality.noiseFloorDb;

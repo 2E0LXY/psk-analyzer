@@ -1,5 +1,6 @@
 #pragma once
 
+#include <complex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -45,6 +46,31 @@ struct Bpsk31DemodResult {
     bool hasLock = false;
 };
 
+// Persistent Costas/Gardner loop state, carried across successive
+// trackWithOffset() calls by Bpsk31StreamDecoder so a real, continuous
+// transmission can stay locked once acquired instead of needing to find
+// a fresh preamble in every call - see Bpsk31StreamDecoder's own comment
+// for why this exists (confirmed via real off-air-style recordings, not
+// theorised) and CwCodec/AudioEngine for how the non-streaming path this
+// replaces worked before. Every field here mirrors a local variable that
+// used to live only on trackWithOffset()'s stack.
+struct Bpsk31TrackState {
+    double epochPos = 0.0;
+    double phaseEpoch = 0.0;
+    double effectiveStep = 0.0;
+    double carrierFreqIntegral = 0.0;
+    double timingFreqIntegral = 0.0;
+    double symbolStart = 0.0;
+    double previousPhase = 0.0;
+    bool havePreviousPhase = false;
+    std::complex<double> previousOnTime{0.0, 0.0};
+    bool havePreviousOnTime = false;
+    // False on a default-constructed state - trackWithOffset() uses this
+    // to know whether to initialise fresh (first call) or continue from
+    // the stored values (every call after).
+    bool initialized = false;
+};
+
 class Bpsk31Codec {
 public:
     explicit Bpsk31Codec(Bpsk31Config config = {});
@@ -73,9 +99,20 @@ public:
     int samplesPerSymbol() const;
     Bpsk31Config config() const;
 
+    // For Bpsk31StreamDecoder: runs the same tracking loop as the
+    // internal batch acquisition path, but continues from (and updates)
+    // the given state instead of always starting fresh - see
+    // Bpsk31TrackState's comment. offsetHz only matters on the state's
+    // first use (it seeds the initial carrier estimate); once
+    // state->initialized is true, tracking continues from where it left
+    // off regardless of what's passed here.
+    std::vector<int> trackStreaming(const std::vector<double> &samples, double offsetHz,
+                                     Bpsk31TrackState &state) const;
+
 private:
     Bpsk31Config m_config;
-    std::vector<int> trackWithOffset(const std::vector<double> &samples, double offsetHz) const;
+    std::vector<int> trackWithOffset(const std::vector<double> &samples, double offsetHz,
+                                      Bpsk31TrackState *state = nullptr) const;
     double scoreDecodedBits(const std::vector<int> &bits) const;
     // Shared implementation for demodulateBits() and
     // demodulateTextWithLock() - runs the multi-hypothesis acquisition
