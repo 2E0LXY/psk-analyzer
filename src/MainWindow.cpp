@@ -53,7 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     loadSettings();
 
-    setWindowTitle("PSKedge v0.5.12 beta");
+    setWindowTitle("PSKedge v0.5.13 beta");
     resize(1480, 900);
 
     auto *settingsAction = new QAction("Setup", this);
@@ -845,7 +845,25 @@ void MainWindow::handleBandChanged(const QString &band)
     };
 
     const double frequencyHz = pskDialHz.value(band, 0.0);
-    if (frequencyHz <= 0.0 || !m_catController) {
+    if (frequencyHz <= 0.0) {
+        return;
+    }
+
+    if (!m_catController || !m_catConnected) {
+        // No CAT link to confirm the radio actually retuned - but the
+        // display (and anything reading it, including the remote
+        // control broadcast to the Android app) still needs to reflect
+        // which band was selected, honestly labelled as the app's
+        // intended frequency rather than a CAT-confirmed one. Leaving
+        // this stale at whatever frequency happened to be showing
+        // before (often just the 14.070MHz default) regardless of which
+        // band button was clicked was a real, reported bug.
+        applyDisplayedFrequency(frequencyHz);
+        statusBar()->showMessage(
+            QString("%1: %2 MHz (no CAT connection - radio not actually retuned)")
+                .arg(band)
+                .arg(frequencyHz / 1000000.0, 0, 'f', 6),
+            4000);
         return;
     }
 

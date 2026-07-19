@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -68,17 +70,36 @@ fun ControlScreen(viewModel: RemoteViewModel) {
         Text("Band", style = MaterialTheme.typography.labelLarge)
         LazyVerticalGrid(
             columns = GridCells.Fixed(5),
-            modifier = Modifier.height(96.dp),
+            modifier = Modifier.height(104.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items(PSK_BANDS) { band ->
                 val selected = band == state.band
+                // Material3's default Button/OutlinedButton sizing (min
+                // touch target ~48dp, generous content padding) is meant
+                // for normal primary actions - applied unmodified to a
+                // dense 10-button grid of short labels like "20m", it
+                // made every band button look oversized relative to the
+                // rest of the screen. Compact padding and a reduced
+                // minimum height keep these touch-friendly without
+                // dominating the layout.
+                val compactPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                 if (selected) {
-                    Button(onClick = { viewModel.setBand(band) }, modifier = Modifier.padding(2.dp)) {
-                        Text(band)
+                    Button(
+                        onClick = { viewModel.setBand(band) },
+                        contentPadding = compactPadding,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+                    ) {
+                        Text(band, style = MaterialTheme.typography.labelMedium)
                     }
                 } else {
-                    OutlinedButton(onClick = { viewModel.setBand(band) }, modifier = Modifier.padding(2.dp)) {
-                        Text(band)
+                    OutlinedButton(
+                        onClick = { viewModel.setBand(band) },
+                        contentPadding = compactPadding,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+                    ) {
+                        Text(band, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

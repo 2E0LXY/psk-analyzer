@@ -78,4 +78,12 @@ private:
     QWebSocketServer *m_server = nullptr;
     QString m_authToken;
     QHash<QWebSocket *, ClientInfo> m_clients;
+    // Cached so a newly-authenticated client can be sent the current
+    // decode immediately (see handleTextMessage's auth handling) instead
+    // of only ever seeing rx_text broadcasts that happen to arrive after
+    // they connect - previously a client connecting mid-QSO, or after
+    // the signal had already stopped, would see nothing until (if ever)
+    // new text streamed in, which looked exactly like "no live RX" even
+    // though the desktop itself had decoded text sitting right there.
+    QString m_lastRxText;
 };

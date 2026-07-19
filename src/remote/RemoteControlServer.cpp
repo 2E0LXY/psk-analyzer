@@ -115,6 +115,12 @@ void RemoteControlServer::handleTextMessage(const QString &message)
         QJsonObject reply;
         reply[QStringLiteral("type")] = QStringLiteral("auth_ok");
         sendJson(client, reply);
+        if (!m_lastRxText.isEmpty()) {
+            QJsonObject rxObj;
+            rxObj[QStringLiteral("type")] = QStringLiteral("rx_text");
+            rxObj[QStringLiteral("text")] = m_lastRxText;
+            sendJson(client, rxObj);
+        }
         emit statusChanged(QStringLiteral("Remote control: client %1 authenticated")
                                 .arg(client->peerAddress().toString()));
         emit stateRequested();
@@ -193,6 +199,7 @@ void RemoteControlServer::broadcastState(const QString &band, const QString &mod
 
 void RemoteControlServer::broadcastRxText(const QString &text)
 {
+    m_lastRxText = text;
     QJsonObject obj;
     obj[QStringLiteral("type")] = QStringLiteral("rx_text");
     obj[QStringLiteral("text")] = text;
