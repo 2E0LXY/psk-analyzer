@@ -12,7 +12,7 @@ cmake_minimum_required(VERSION 3.21)
 # as a repair of the same already-installed 0.2.0 product, not an
 # upgrade. Bump this for every release that should actually replace
 # installed files, not just the git tag.
-project(PSKedge VERSION 0.5.14 LANGUAGES CXX)
+project(PSKedge VERSION 0.5.15 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -197,17 +197,15 @@ if(WIN32)
     set(CPACK_WIX_PROPERTY_ARPHELPLINK "https://github.com/2E0LXY/pskedge")
     set(CPACK_WIX_PROPERTY_ARPURLINFOABOUT "https://github.com/2E0LXY/pskedge")
 
-    # "Launch PSKedge now" checkbox on the installer's final page - see
-    # assets/wix_launch_patch.xml for how this works and the specific
-    # uncertainty around INSTALLFOLDER being CPack's actual directory Id
-    # (reasoned from general WiX convention, not confirmed against
-    # CPack's own generated .wxs, which this environment has no WiX
-    # toolchain to inspect). WixUtilExtension provides the WixShellExec
-    # custom action the patch file references, so it must be added to
-    # both candle.exe and light.exe's extension list, not just one -
-    # CPack's WiX v3 generator invokes them as separate steps.
-    set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/assets/wix_launch_patch.xml")
-    set(CPACK_WIX_EXTENSIONS "WixUtilExtension")
+    # No "Launch PSKedge now" checkbox - removed per explicit request.
+    # The custom-action chain that implemented it (assets/wix_launch_patch.xml,
+    # since deleted - see git history) never actually worked, and its own
+    # comments admitted real uncertainty about whether INSTALLFOLDER was
+    # even the correct WiX directory Id for this generator, unconfirmed
+    # against CPack's actual generated .wxs. Simplest reliable fix: the
+    # Start Menu shortcut CPack already creates is a normal, working way
+    # to launch the app after install, without a custom action that has
+    # never actually functioned.
 
     # CPACK_WIX_PROGRAM_MENU_FOLDER above only names the Start Menu folder
     # - it does not itself create any shortcut. Actually creating the
@@ -234,17 +232,13 @@ if(WIN32)
     # regenerated or changed after this.
     set(CPACK_WIX_UPGRADE_GUID "CD3190DF-98B2-402F-934D-A21D8A1EEAC6")
 
-    # Installer branding images - optional, matching the same
-    # exists-check pattern used elsewhere in this file so the installer
-    # still builds (just unbranded) if these haven't been added yet.
-    # WiX's required dimensions differ from NSIS's and are documented in
-    # assets/README.md.
-    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/wix_banner.bmp")
-        set(CPACK_WIX_UI_BANNER "${CMAKE_SOURCE_DIR}/assets/wix_banner.bmp")
-    endif()
-    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/wix_dialog.bmp")
-        set(CPACK_WIX_UI_DIALOG "${CMAKE_SOURCE_DIR}/assets/wix_dialog.bmp")
-    endif()
+    # No custom banner/dialog images - removed per explicit request after
+    # repeated placement issues across several earlier attempts were
+    # never fully resolved (see git history: backgrounds, icon-only
+    # corner placement, light-vs-dark text legibility, and still "wrong
+    # place" after all of that). WiX's own plain default UI is used
+    # instead, which is simpler and reliably correct rather than another
+    # attempt at a fix that has a track record of not sticking.
 endif()
 
 include(CPack)

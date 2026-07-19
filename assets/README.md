@@ -9,13 +9,12 @@ these present.
 | File | Used for | Required format |
 |---|---|---|
 | `splash.png` | In-app splash screen shown while the program loads | PNG, any size (scaled to fit) |
-| `wix_banner.bmp` | WiX/MSI installer banner (top of each page except welcome/finish) | BMP, 493x58 px |
-| `wix_dialog.bmp` | WiX/MSI welcome/finish page background | BMP, 493x312 px |
 | `pskedge.ico` | Windows executable/installer icon (shown in Add/Remove Programs) | ICO, multi-resolution (16/32/48/256px) recommended |
 
-WiX requires the banner/dialog images in those exact pixel dimensions - a
-differently-sized source image needs to be cropped/resized to match, not
-just dropped in as-is.
+No custom WiX installer banner/dialog images - removed per explicit
+request after repeated placement issues across several earlier attempts
+were never fully resolved. The installer uses WiX's own plain default UI
+instead.
 
 ## Why WiX, not NSIS
 
