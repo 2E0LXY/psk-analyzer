@@ -53,7 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     loadSettings();
 
-    setWindowTitle("PSKedge v0.5.13 beta");
+    setWindowTitle("PSKedge v0.5.14 beta");
     resize(1480, 900);
 
     auto *settingsAction = new QAction("Setup", this);
@@ -806,9 +806,52 @@ void MainWindow::handleCatStatus(const QString &status)
     }
 }
 
+QString MainWindow::bandForFrequency(double frequencyHz)
+{
+    // Real amateur allocation band edges (not just the single PSK31
+    // calling-frequency point each button tunes to), so a CAT-reported
+    // frequency anywhere in the band - not just exactly at the PSK31
+    // spot - is correctly identified. IARU Region 1 edges used for the
+    // WARC/overlapping bands (17m/12m); the others are effectively
+    // universal.
+    struct BandRange {
+        const char *name;
+        double lowHz;
+        double highHz;
+    };
+    static const BandRange kBands[] = {
+        {"160m", 1800000.0, 2000000.0},
+        {"80m", 3500000.0, 4000000.0},
+        {"40m", 7000000.0, 7300000.0},
+        {"30m", 10100000.0, 10150000.0},
+        {"20m", 14000000.0, 14350000.0},
+        {"17m", 18068000.0, 18168000.0},
+        {"15m", 21000000.0, 21450000.0},
+        {"12m", 24890000.0, 24990000.0},
+        {"10m", 28000000.0, 29700000.0},
+        {"6m", 50000000.0, 54000000.0},
+    };
+    for (const auto &b : kBands) {
+        if (frequencyHz >= b.lowHz && frequencyHz <= b.highHz) {
+            return QString::fromLatin1(b.name);
+        }
+    }
+    return QString(); // out of all known ham bands - leave whatever was showing rather than guess
+}
+
 void MainWindow::applyDisplayedFrequency(double frequencyHz)
 {
     m_catFrequencyHz = frequencyHz;
+    // Keep the band indicator honest: previously this only ever changed
+    // when a band button was clicked, so a CAT-reported frequency that
+    // didn't match the last-clicked band (radio manually retuned, or
+    // just never matching the default "20m" at startup) showed a
+    // visibly wrong band/frequency combination - e.g. "10.140000 MHz"
+    // (30m) labelled "20m", a real reported bug.
+    const QString derivedBand = bandForFrequency(frequencyHz);
+    if (!derivedBand.isEmpty()) {
+        m_currentBand = derivedBand;
+    }
     if (m_vfoLabel) {
         m_vfoLabel->setText(QString("%1 MHz").arg(frequencyHz / 1000000.0, 0, 'f', 6));
     }

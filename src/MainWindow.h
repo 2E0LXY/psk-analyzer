@@ -76,6 +76,13 @@ private:
     void saveSettings() const;
     void updateStatusLabels();
     void applyDisplayedFrequency(double frequencyHz);
+    // Nearest amateur band for a given frequency, using the same
+    // pskDialHz table handleBandChanged() uses - shared so
+    // applyDisplayedFrequency() can keep m_currentBand in sync with
+    // whatever frequency is actually being shown, regardless of whether
+    // it got there via a band button click or a CAT poll reporting the
+    // radio's real, possibly-different frequency.
+    static QString bandForFrequency(double frequencyHz);
     QWidget *buildTopBar();
     QWidget *buildRightPanel();
     QWidget *buildWorkflowPanel();
